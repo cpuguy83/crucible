@@ -118,6 +118,7 @@ struct SettingsWindowView: View {
 
             runtimeSettingsCard
             imageSettingsCard
+            daemonConfigSettingsCard
             hostAccessSettingsCard
             resourceSettingsCard
             kernelSettingsCard
@@ -167,6 +168,31 @@ struct SettingsWindowView: View {
             settingLabel("BuildKit socket", "Unix socket path exposed on macOS. buildctl and docker buildx connect to this endpoint.")
             TextField("Host socket path", text: $viewModel.settingsDraft.hostSocketPath)
                 .textFieldStyle(.roundedBorder)
+        }
+    }
+
+    private var daemonConfigSettingsCard: some View {
+        card("Daemon Config") {
+            settingLabel("buildkitd.toml", "Optional BuildKit daemon TOML configuration. Crucible writes this to app support, mounts it read-only at `/etc/buildkit/buildkitd.toml`, and starts buildkitd with `--config`. Leave empty to use the image defaults.")
+            TextEditor(text: $viewModel.settingsDraft.daemonConfigTOML)
+                .font(.system(.body, design: .monospaced))
+                .frame(minHeight: 180)
+                .scrollContentBackground(.hidden)
+                .background(Color(nsColor: .textBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
+                )
+            HStack {
+                Button("Clear Config") {
+                    viewModel.settingsDraft.daemonConfigTOML = ""
+                }
+                .disabled(viewModel.settingsDraft.daemonConfigTOML.isEmpty)
+                Text("Changes apply when settings are applied and BuildKit restarts.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 

@@ -43,6 +43,10 @@ public struct BuildKitSettings: Sendable, Equatable, Codable {
     /// Whether the daemon should auto-start when the app launches / on login.
     public var autoStart: Bool
 
+    /// Optional buildkitd TOML configuration. When empty, buildkitd starts
+    /// with its image defaults.
+    public var daemonConfigTOML: String
+
     public init(
         backend: BackendKind = .containerization,
         imageReference: String = BuildKitSettings.defaultImageReference,
@@ -51,7 +55,8 @@ public struct BuildKitSettings: Sendable, Equatable, Codable {
         cpuCount: Int = 4,
         memoryMiB: Int = 4096,
         kernelOverridePath: String? = nil,
-        autoStart: Bool = true
+        autoStart: Bool = true,
+        daemonConfigTOML: String = ""
     ) {
         self.backend = backend
         self.imageReference = imageReference == Self.legacyDefaultImageReference ? Self.defaultImageReference : imageReference
@@ -61,6 +66,7 @@ public struct BuildKitSettings: Sendable, Equatable, Codable {
         self.memoryMiB = memoryMiB
         self.kernelOverridePath = kernelOverridePath
         self.autoStart = autoStart
+        self.daemonConfigTOML = daemonConfigTOML
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -72,6 +78,7 @@ public struct BuildKitSettings: Sendable, Equatable, Codable {
         case memoryMiB
         case kernelOverridePath
         case autoStart
+        case daemonConfigTOML
     }
 
     public init(from decoder: Decoder) throws {
@@ -86,7 +93,8 @@ public struct BuildKitSettings: Sendable, Equatable, Codable {
             cpuCount: try c.decodeIfPresent(Int.self, forKey: .cpuCount) ?? defaults.cpuCount,
             memoryMiB: try c.decodeIfPresent(Int.self, forKey: .memoryMiB) ?? defaults.memoryMiB,
             kernelOverridePath: try c.decodeIfPresent(String.self, forKey: .kernelOverridePath) ?? defaults.kernelOverridePath,
-            autoStart: try c.decodeIfPresent(Bool.self, forKey: .autoStart) ?? defaults.autoStart
+            autoStart: try c.decodeIfPresent(Bool.self, forKey: .autoStart) ?? defaults.autoStart,
+            daemonConfigTOML: try c.decodeIfPresent(String.self, forKey: .daemonConfigTOML) ?? defaults.daemonConfigTOML
         )
     }
 
@@ -102,6 +110,7 @@ public struct BuildKitSettings: Sendable, Equatable, Codable {
         if memoryMiB != defaults.memoryMiB { try c.encode(memoryMiB, forKey: .memoryMiB) }
         if kernelOverridePath != defaults.kernelOverridePath { try c.encode(kernelOverridePath, forKey: .kernelOverridePath) }
         if autoStart != defaults.autoStart { try c.encode(autoStart, forKey: .autoStart) }
+        if daemonConfigTOML != defaults.daemonConfigTOML { try c.encode(daemonConfigTOML, forKey: .daemonConfigTOML) }
     }
 
     public static func defaultHostSocketPath() -> String {

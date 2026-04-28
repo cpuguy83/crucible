@@ -25,6 +25,7 @@ public actor ContainerizationBackend: BuildKitBackend {
     /// Stable container id; we run a single long-lived buildkitd container.
     static let containerID = "crucible-buildkitd"
     static let stateImageVersion = "2-journaled-ext4-8g-uncached-fullsync"
+    static let daemonConfigGuestPath = "/etc/buildkit/buildkitd.toml"
 
     private let settings: BuildKitSettings
     private let appRoot: URL
@@ -186,10 +187,19 @@ public actor ContainerizationBackend: BuildKitBackend {
                 ]
             )
 
-            let buildkitArgs = [
+            var extraMounts: [Containerization.Mount] = []
+            var buildkitArgs = [
                 "/usr/bin/buildkitd",
                 "--addr", "unix:///run/buildkit/buildkitd.sock",
             ]
+            if let daemonConfigURL = try writeDaemonConfigIfNeeded() {
+                extraMounts.append(Containerization.Mount.share(
+                    source: daemonConfigURL.path,
+                    destination: Self.daemonConfigGuestPath,
+                    options: ["ro"]
+                ))
+                buildkitArgs.append(contentsOf: ["--config", Self.daemonConfigGuestPath])
+            }
 
             let cpuCount = self.settings.cpuCount
             let memoryBytes = UInt64(self.settings.memoryMiB).mib()
@@ -206,6 +216,7 @@ public actor ContainerizationBackend: BuildKitBackend {
                 config.useInit = true
                 config.sockets = [socket]
                 config.mounts.append(stateMount)
+                config.mounts.append(contentsOf: extraMounts)
                 config.process.arguments = buildkitArgs
                 config.process.stdout = stdoutWriter
                 config.process.stderr = stderrWriter
@@ -369,6 +380,17 @@ public actor ContainerizationBackend: BuildKitBackend {
 
     private func ensureAppRoot() async throws {
         try FileManager.default.createDirectory(at: appRoot, withIntermediateDirectories: true)
+    }
+
+    private func writeDaemonConfigIfNeeded() throws -> URL? {
+        let config = settings.daemonConfigTOML.trimmingCharacters(in: .whitespacesAndNewlines)
+        let url = appRoot.appendingPathComponent("buildkitd.toml")
+        if config.isEmpty {
+            try? FileManager.default.removeItem(at: url)
+            return nil
+        }
+        try config.write(to: url, atomically: true, encoding: .utf8)
+        return url
     }
 
     /// Prevent multiple Crucible processes (e.g. the GUI app and the

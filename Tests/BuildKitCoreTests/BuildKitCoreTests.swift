@@ -36,6 +36,21 @@ struct SettingsValidatorTests {
         #expect(object["cpuCount"] == nil)
     }
 
+    @Test func daemonConfigStillEncodes() throws {
+        var settings = BuildKitSettings()
+        settings.daemonConfigTOML = "[worker.oci]\n  max-parallelism = 4\n"
+
+        let data = try JSONEncoder().encode(settings)
+        let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(object["daemonConfigTOML"] as? String == "[worker.oci]\n  max-parallelism = 4\n")
+    }
+
+    @Test func oversizedDaemonConfigRejected() {
+        var settings = BuildKitSettings()
+        settings.daemonConfigTOML = String(repeating: "x", count: 256 * 1024 + 1)
+        #expect(BuildKitSettingsValidator.validate(settings).contains(.daemonConfigTooLarge(256 * 1024 + 1)))
+    }
+
     @Test func disabledAutoStartEncodes() throws {
         var settings = BuildKitSettings()
         settings.autoStart = false

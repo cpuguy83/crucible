@@ -10,6 +10,7 @@ public enum BuildKitSettingsValidator {
         case cpuCountOutOfRange(Int)
         case memoryOutOfRange(Int)
         case backendUnavailable(BuildKitSettings.BackendKind)
+        case daemonConfigTooLarge(Int)
     }
 
     public static func validate(_ s: BuildKitSettings) -> [Issue] {
@@ -38,6 +39,11 @@ public enum BuildKitSettingsValidator {
 
         if s.backend == .containerCLI {
             issues.append(.backendUnavailable(.containerCLI))
+        }
+
+        let configBytes = s.daemonConfigTOML.utf8.count
+        if configBytes > 256 * 1024 {
+            issues.append(.daemonConfigTooLarge(configBytes))
         }
 
         return issues
