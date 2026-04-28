@@ -140,6 +140,9 @@ struct SettingsWindowView: View {
 
             Toggle("Start BuildKit when Crucible launches", isOn: $viewModel.settingsDraft.autoStart)
             Toggle("Launch Crucible when you log in", isOn: launchAtLoginBinding)
+            Text("Rosetta x86_64 emulation is enabled automatically when available. Crucible registers binfmt_misc in the VM and advertises linux/amd64 plus linux/arm64 to BuildKit unless your daemon config overrides worker platforms.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 

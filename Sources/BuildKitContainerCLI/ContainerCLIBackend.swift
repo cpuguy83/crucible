@@ -183,7 +183,7 @@ public actor ContainerCLIBackend: BuildKitBackend {
     }
 
     private func writeDaemonConfigIfNeeded() throws -> URL? {
-        let config = settings.daemonConfigTOML.trimmingCharacters(in: .whitespacesAndNewlines)
+        let config = settings.effectiveDaemonConfigTOML().trimmingCharacters(in: .whitespacesAndNewlines)
         let url = appRoot.appendingPathComponent("buildkitd.toml")
         if config.isEmpty {
             try? FileManager.default.removeItem(at: url)
@@ -268,6 +268,7 @@ public enum ContainerCLICommands {
         if let kernelOverridePath = settings.kernelOverridePath, !kernelOverridePath.isEmpty {
             args.append(contentsOf: ["--kernel", kernelOverridePath])
         }
+        args.append("--rosetta")
         if let configPath {
             args.append(contentsOf: [
                 "--mount", "type=bind,source=\(configPath),target=\(ContainerCLIBackend.daemonConfigGuestPath),readonly",

@@ -45,6 +45,27 @@ struct SettingsValidatorTests {
         #expect(object["daemonConfigTOML"] as? String == "[worker.oci]\n  max-parallelism = 4\n")
     }
 
+    @Test func effectiveDaemonConfigDefaultsToRosettaPlatforms() {
+        let config = BuildKitSettings().effectiveDaemonConfigTOML()
+        #expect(config.contains(#"platforms = ["linux/arm64", "linux/amd64"]"#))
+    }
+
+    @Test func effectiveDaemonConfigInjectsRosettaPlatformsIntoWorkerOCI() {
+        var settings = BuildKitSettings()
+        settings.daemonConfigTOML = "[worker.oci]\n  max-parallelism = 4\n"
+
+        let config = settings.effectiveDaemonConfigTOML()
+        #expect(config.contains("[worker.oci]\n  platforms = [\"linux/arm64\", \"linux/amd64\"]\n  max-parallelism = 4"))
+    }
+
+    @Test func effectiveDaemonConfigPreservesExplicitPlatforms() {
+        var settings = BuildKitSettings()
+        settings.daemonConfigTOML = "[worker.oci]\n  platforms = [\"linux/arm64\"]\n"
+
+        let config = settings.effectiveDaemonConfigTOML()
+        #expect(config == settings.daemonConfigTOML)
+    }
+
     @Test func oversizedDaemonConfigRejected() {
         var settings = BuildKitSettings()
         settings.daemonConfigTOML = String(repeating: "x", count: 256 * 1024 + 1)

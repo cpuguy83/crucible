@@ -39,6 +39,19 @@ struct ContainerCLICommandsTests {
         #expect(command.arguments.suffix(5) == ["/usr/bin/buildkitd", "--addr", "unix:///run/buildkit/buildkitd.sock", "--config", "/etc/buildkit/buildkitd.toml"])
     }
 
+    @Test func runCommandAlwaysEnablesRosetta() {
+        let settings = BuildKitSettings()
+        let command = ContainerCLICommands.runDetachedBuildKit(
+            binary: "/opt/homebrew/bin/container",
+            containerID: "crucible-buildkitd",
+            settings: settings,
+            statePath: "/tmp/crucible-state",
+            configPath: nil
+        )
+
+        #expect(command.arguments.contains("--rosetta"))
+    }
+
     @Test func pullCommandUsesImageSubcommand() {
         let command = ContainerCLICommands.pullImage(binary: "/opt/homebrew/bin/container", image: "docker.io/moby/buildkit:buildx-stable-1")
         #expect(command.arguments == ["image", "pull", "docker.io/moby/buildkit:buildx-stable-1"])

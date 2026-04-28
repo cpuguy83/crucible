@@ -7,11 +7,13 @@ import Foundation
 public struct BuildKitSettings: Sendable, Equatable, Codable {
     public static let defaultImageReference = "docker.io/moby/buildkit:buildx-stable-1"
     public static let legacyDefaultImageReference = "docker.io/moby/buildkit:latest"
+    public static let rosettaWorkerPlatformsTOML = "platforms = [\"linux/arm64\", \"linux/amd64\"]"
     public static let exampleDaemonConfigTOML = """
     # BuildKit daemon configuration mounted at /etc/buildkit/buildkitd.toml.
     debug = false
 
     [worker.oci]
+      platforms = ["linux/arm64", "linux/amd64"]
       max-parallelism = 4
       gc = true
 
@@ -128,5 +130,48 @@ public struct BuildKitSettings: Sendable, Equatable, Codable {
     public static func defaultHostSocketPath() -> String {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         return "\(home)/Library/Application Support/Crucible/buildkitd.sock"
+    }
+
+    public func effectiveDaemonConfigTOML() -> String {
+        Self.daemonConfigWithRosettaPlatforms(daemonConfigTOML)
+    }
+
+    public static func daemonConfigWithRosettaPlatforms(_ config: String) -> String {
+        let trimmed = config.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return """
+            [worker.oci]
+              \(rosettaWorkerPlatformsTOML)
+            """
+        }
+        guard !workerOCISectionDefinesPlatforms(trimmed) else { return config }
+
+        var lines = config.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        if let workerIndex = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == "[worker.oci]" }) {
+            lines.insert("  \(rosettaWorkerPlatformsTOML)", at: workerIndex + 1)
+            return lines.joined(separator: "\n")
+        }
+
+        let separator = config.hasSuffix("\n") || config.isEmpty ? "" : "\n\n"
+        return config + separator + """
+        [worker.oci]
+          \(rosettaWorkerPlatformsTOML)
+        """
+    }
+
+    private static func workerOCISectionDefinesPlatforms(_ config: String) -> Bool {
+        var inWorkerOCI = false
+        for rawLine in config.split(separator: "\n", omittingEmptySubsequences: false) {
+            let line = String(rawLine).trimmingCharacters(in: .whitespaces)
+            if line.isEmpty || line.hasPrefix("#") { continue }
+            if line.hasPrefix("[") {
+                inWorkerOCI = line == "[worker.oci]"
+                continue
+            }
+            if inWorkerOCI && line.hasPrefix("platforms") {
+                return true
+            }
+        }
+        return false
     }
 }

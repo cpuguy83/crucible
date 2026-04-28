@@ -143,7 +143,8 @@ public actor ContainerizationBackend: BuildKitBackend {
                 kernel: kernel,
                 initfsReference: settings.initfsReference,
                 imageStore: imageStore,
-                network: try VmnetNetwork()
+                network: try VmnetNetwork(),
+                rosetta: true
             )
 
             // Pull / unpack the buildkitd image into a per-container ext4
@@ -383,7 +384,7 @@ public actor ContainerizationBackend: BuildKitBackend {
     }
 
     private func writeDaemonConfigIfNeeded() throws -> URL? {
-        let config = settings.daemonConfigTOML.trimmingCharacters(in: .whitespacesAndNewlines)
+        let config = settings.effectiveDaemonConfigTOML().trimmingCharacters(in: .whitespacesAndNewlines)
         let url = appRoot.appendingPathComponent("buildkitd.toml")
         if config.isEmpty {
             try? FileManager.default.removeItem(at: url)
