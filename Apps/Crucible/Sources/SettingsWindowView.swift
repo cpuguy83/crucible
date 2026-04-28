@@ -81,6 +81,8 @@ struct SettingsWindowView: View {
                     buildxView
                 case .storage:
                     storageView
+                case .reset:
+                    resetView
                 case .diagnostics:
                     diagnosticsView
                 }
@@ -144,8 +146,15 @@ struct SettingsWindowView: View {
     private var imageSettingsCard: some View {
         card("Images") {
             settingLabel("BuildKit daemon image", "OCI image that contains buildkitd and buildctl. Use a tag while experimenting, or a digest for reproducible behavior.")
-            TextField("docker.io/moby/buildkit:latest", text: $viewModel.settingsDraft.imageReference)
+            TextField(BuildKitSettings.defaultImageReference, text: $viewModel.settingsDraft.imageReference)
                 .textFieldStyle(.roundedBorder)
+            HStack {
+                Button("Pull Applied Image", action: viewModel.pullImage)
+                    .disabled(!viewModel.canPullImage)
+                Text("Pulls `\(viewModel.appliedSettings.imageReference)` into Crucible's local content store.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
 
             settingLabel("VM init image", "vminitd image used by Apple Containerization to initialize and manage the guest VM. Usually this should match the framework version.")
             TextField("ghcr.io/apple/containerization/vminit:0.31.0", text: $viewModel.settingsDraft.initfsReference)
@@ -294,6 +303,44 @@ struct SettingsWindowView: View {
                 } else {
                     Text("No storage information available yet.")
                         .foregroundStyle(.secondary)
+                }
+            }
+
+        }
+    }
+
+    private var resetView: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            card("Reset Options") {
+                Text("Choose the smallest reset that matches the problem. Configuration reset keeps downloaded data; local state reset keeps configuration; factory reset removes both.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+
+                VStack(alignment: .leading, spacing: 12) {
+                    resetActionRow(
+                        title: "Reset Configuration…",
+                        detail: "Restore settings to current defaults without deleting BuildKit state, pulled images, or kernel cache.",
+                        action: viewModel.resetConfiguration,
+                        disabled: !viewModel.canResetConfiguration
+                    )
+                    resetActionRow(
+                        title: "Reset Local State…",
+                        detail: "Stop BuildKit and delete local state, pulled images, kernels, and rootfs workspaces while preserving configuration.",
+                        action: viewModel.resetLocalState,
+                        disabled: !viewModel.canResetLocalState
+                    )
+                    resetActionRow(
+                        title: "Factory Reset…",
+                        detail: "Remove all Crucible settings and local data.",
+                        action: viewModel.factoryReset,
+                        disabled: !viewModel.canFactoryReset
+                    )
+                }
+
+                if !viewModel.canFactoryReset {
+                    Text("Wait for startup/shutdown to finish before resetting.")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
                 }
             }
         }
@@ -481,6 +528,21 @@ struct SettingsWindowView: View {
         .padding(.vertical, 2)
     }
 
+    private func resetActionRow(title: String, detail: String, action: @escaping () -> Void, disabled: Bool) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title.replacingOccurrences(of: "…", with: ""))
+                    .font(.callout.weight(.medium))
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button(title, action: action)
+                .disabled(disabled)
+        }
+    }
+
     private func copy(_ text: String) {
         let pb = NSPasteboard.general
         pb.clearContents()
@@ -538,6 +600,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
     case general
     case buildx
     case storage
+    case reset
     case diagnostics
 
     var id: String { rawValue }
@@ -547,6 +610,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
         case .general: "General"
         case .buildx: "Buildx"
         case .storage: "Storage"
+        case .reset: "Reset"
         case .diagnostics: "Diagnostics"
         }
     }
@@ -556,6 +620,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
         case .general: "Control the BuildKit daemon and copy its endpoint."
         case .buildx: "Manage docker buildx integration."
         case .storage: "Manage cache, metadata, and persistent state."
+        case .reset: "Reset configuration or local data."
         case .diagnostics: "Inspect current state and collect troubleshooting details."
         }
     }
@@ -565,6 +630,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
         case .general: "switch.2"
         case .buildx: "hammer"
         case .storage: "internaldrive"
+        case .reset: "arrow.counterclockwise"
         case .diagnostics: "stethoscope"
         }
     }

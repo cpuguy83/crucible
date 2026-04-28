@@ -86,6 +86,22 @@ final class TrayViewModel: ObservableObject {
         }
     }
 
+    var canPullImage: Bool {
+        !settingsDirty && !settingsApplyBlocked && BuildKitSettingsValidator.validate(appliedSettings).isEmpty
+    }
+
+    var canFactoryReset: Bool {
+        switch state {
+        case .starting, .stopping:
+            return false
+        case .stopped, .running, .degraded, .error:
+            return true
+        }
+    }
+
+    var canResetConfiguration: Bool { canFactoryReset }
+    var canResetLocalState: Bool { canFactoryReset }
+
     var statusText: String {
         switch state {
         case .stopped: return "Stopped"
@@ -151,6 +167,24 @@ final class TrayViewModel: ObservableObject {
         }
     }
 
+    func pullImage() {
+        Task {
+            await self.subscribeBackendStreamsIfNeeded()
+            do {
+                try await self.supervisor.pullImage()
+                self.state = await supervisor.currentState()
+                self.lastError = nil
+                self.refreshStorageUsage()
+                self.logStore.append(source: .supervisor, level: .info, "Pulled \(self.appliedSettings.imageReference)")
+            } catch {
+                let msg = String(describing: error)
+                self.lastError = msg
+                self.logStore.append(source: .supervisor, level: .error, "pull image failed: \(msg)")
+                Self.log.error("pull image failed: \(msg, privacy: .public)")
+            }
+        }
+    }
+
     /// Stop, wipe persistent buildkitd state (cache, metadata), then leave
     /// the daemon stopped so the user can decide when to restart. Use
     /// when bbolt corruption ("structure needs cleaning") prevents
@@ -162,6 +196,117 @@ final class TrayViewModel: ObservableObject {
             confirmTitle: "Reset State"
         ) else { return }
         Task { await run("resetState") { try await self.supervisor.resetState() } }
+    }
+
+    func resetConfiguration() {
+        guard confirm(
+            title: "Reset configuration to defaults?",
+            message: "This resets Crucible settings to current defaults. BuildKit state, pulled images, and kernel cache are kept.",
+            confirmTitle: "Reset Configuration"
+        ) else { return }
+
+        Task {
+            do {
+                let defaults = BuildKitSettings()
+                let shouldRestart = self.isRunning
+                try await self.supervisor.updateSettings(defaults)
+                try AppSettingsStore.delete()
+                try? LoginItemManager.setEnabled(false)
+                self.appliedSettings = defaults
+                self.settingsDraft = defaults
+                self.launchAtLoginEnabled = LoginItemManager.isEnabled
+                self.subscribedToBackend = false
+                self.subscriberTask?.cancel()
+                self.subscriberTask = nil
+                self.state = await supervisor.currentState()
+                self.lastError = nil
+                self.logStore.append(source: .supervisor, level: .info, "Configuration reset to defaults")
+                if shouldRestart || defaults.autoStart {
+                    await self.start()
+                }
+            } catch {
+                self.reportResetFailure("reset configuration", error)
+            }
+        }
+    }
+
+    func resetLocalState() {
+        guard confirm(
+            title: "Reset local state?",
+            message: "This stops BuildKit and deletes local runtime data, including BuildKit state, pulled images, kernels, and rootfs workspaces. Configuration is kept.",
+            confirmTitle: "Reset Local State"
+        ) else { return }
+
+        Task {
+            do {
+                try await self.supervisor.stop()
+                let settings = self.appliedSettings
+                try AppSettingsStore.save(settings)
+                try self.removeAppSupportDataPreservingSettings()
+                try AppSettingsStore.save(settings)
+                try await self.supervisor.updateSettings(settings)
+                self.finishReset(settings: settings, message: "Local state reset")
+            } catch {
+                self.reportResetFailure("reset local state", error)
+            }
+        }
+    }
+
+    func factoryReset() {
+        guard confirm(
+            title: "Factory reset Crucible?",
+            message: "This stops BuildKit, removes Crucible settings, deletes local images, kernels, rootfs workspaces, and BuildKit state. All cached build layers and custom settings will be lost.",
+            confirmTitle: "Factory Reset"
+        ) else { return }
+
+        Task {
+            do {
+                try await self.supervisor.stop()
+                try? LoginItemManager.setEnabled(false)
+                try AppSettingsStore.delete()
+                let root = StorageUsage.appSupportDirectory()
+                if FileManager.default.fileExists(atPath: root.path) {
+                    try FileManager.default.removeItem(at: root)
+                }
+
+                let defaults = BuildKitSettings()
+                try await self.supervisor.updateSettings(defaults)
+                self.launchAtLoginEnabled = LoginItemManager.isEnabled
+                self.finishReset(settings: defaults, message: "Factory reset complete")
+            } catch {
+                self.reportResetFailure("factory reset", error)
+            }
+        }
+    }
+
+    private func removeAppSupportDataPreservingSettings() throws {
+        let root = StorageUsage.appSupportDirectory()
+        let settingsURL = AppSettingsStore.settingsURL.standardizedFileURL
+        guard let contents = try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil) else { return }
+        for url in contents where url.standardizedFileURL != settingsURL {
+            try FileManager.default.removeItem(at: url)
+        }
+    }
+
+    private func finishReset(settings: BuildKitSettings, message: String) {
+        appliedSettings = settings
+        settingsDraft = settings
+        subscribedToBackend = false
+        subscriberTask?.cancel()
+        subscriberTask = nil
+        Task {
+            self.state = await supervisor.currentState()
+            self.lastError = nil
+            self.refreshStorageUsage()
+            self.logStore.append(source: .supervisor, level: .info, message)
+        }
+    }
+
+    private func reportResetFailure(_ operation: String, _ error: Error) {
+        let msg = String(describing: error)
+        lastError = msg
+        logStore.append(source: .supervisor, level: .error, "\(operation) failed: \(msg)")
+        Self.log.error("\(operation) failed: \(msg, privacy: .public)")
     }
 
     func copyLastErrorToPasteboard() {
