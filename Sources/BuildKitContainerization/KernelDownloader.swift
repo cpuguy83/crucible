@@ -16,12 +16,17 @@ public actor KernelDownloader {
         "https://github.com/kata-containers/kata-containers/releases/download/3.17.0/kata-static-3.17.0-arm64.tar.xz"
     )!
 
+    /// SHA256 of `defaultSourceURL`. Kata does not publish a checksum file for
+    /// this release asset, so keep this pinned with the URL.
+    public static let defaultSourceSHA256 = "647c7612e6edf789d5e14698c48c99d8bac15ad139ffaa1c8bb7d229f748d181"
+
     /// Path within the tarball that holds the kernel binary.
     public static let defaultMemberPath = "opt/kata/share/kata-containers/vmlinux.container"
 
     public enum Error: Swift.Error, CustomStringConvertible {
         case downloadFailed(URL, underlying: Swift.Error)
         case httpStatus(Int, URL)
+        case checksumMismatch(URL, expected: String, actual: String)
         case extractFailed(member: String, underlying: Swift.Error)
         case writeFailed(URL, underlying: Swift.Error)
 
@@ -31,6 +36,8 @@ public actor KernelDownloader {
                 return "Failed to download kernel from \(u.absoluteString): \(e)"
             case .httpStatus(let s, let u):
                 return "Kernel download HTTP \(s) from \(u.absoluteString)"
+            case .checksumMismatch(let u, let expected, let actual):
+                return "Kernel download checksum mismatch for \(u.lastPathComponent): expected \(expected), got \(actual)"
             case .extractFailed(let m, let e):
                 return "Failed to extract \(m) from kernel tarball: \(e)"
             case .writeFailed(let u, let e):
@@ -49,15 +56,18 @@ public actor KernelDownloader {
     private let cacheDirectory: URL
     private let sourceURL: URL
     private let memberPath: String
+    private let expectedSHA256: String?
 
     public init(
         cacheDirectory: URL,
         sourceURL: URL = KernelDownloader.defaultSourceURL,
-        memberPath: String = KernelDownloader.defaultMemberPath
+        memberPath: String = KernelDownloader.defaultMemberPath,
+        expectedSHA256: String? = KernelDownloader.defaultSourceSHA256
     ) {
         self.cacheDirectory = cacheDirectory
         self.sourceURL = sourceURL
         self.memberPath = memberPath
+        self.expectedSHA256 = expectedSHA256
     }
 
     /// Returns a path to a cached `vmlinux` binary, downloading and
@@ -102,6 +112,7 @@ public actor KernelDownloader {
     ) async throws -> URL {
         let dest = cacheDirectory.appendingPathComponent("kernel-source.tar.xz")
         if FileManager.default.fileExists(atPath: dest.path) {
+            try verifyChecksum(of: dest)
             return dest
         }
 
@@ -137,6 +148,7 @@ public actor KernelDownloader {
                 try handle.write(contentsOf: bytes)
             }
             try handle.close()
+            try verifyChecksum(of: tmp)
             try FileManager.default.moveItem(at: tmp, to: dest)
             progress?(.init(phase: .downloading, bytesReceived: received, bytesExpected: expected))
             return dest
@@ -144,6 +156,15 @@ public actor KernelDownloader {
             throw e
         } catch {
             throw Error.downloadFailed(sourceURL, underlying: error)
+        }
+    }
+
+    private func verifyChecksum(of url: URL) throws {
+        guard let expectedSHA256 else { return }
+        let data = try Data(contentsOf: url)
+        let actual = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        guard actual.caseInsensitiveCompare(expectedSHA256) == .orderedSame else {
+            throw Error.checksumMismatch(sourceURL, expected: expectedSHA256, actual: actual)
         }
     }
 

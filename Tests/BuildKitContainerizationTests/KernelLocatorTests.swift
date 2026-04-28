@@ -110,4 +110,31 @@ struct KernelDownloaderTests {
         let bytes = try Data(contentsOf: resolved)
         #expect(String(data: bytes, encoding: .utf8) == "pre-staged")
     }
+
+    @Test func cachedTarballChecksumMismatchFailsBeforeExtraction() async throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("crucible-dl-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let source = URL(string: "https://example.com/kernel.tar.xz")!
+        let downloader = KernelDownloader(
+            cacheDirectory: dir,
+            sourceURL: source,
+            expectedSHA256: String(repeating: "0", count: 64)
+        )
+        try Data("not the expected tarball".utf8)
+            .write(to: dir.appendingPathComponent("kernel-source.tar.xz"))
+
+        do {
+            _ = try await downloader.ensureKernel()
+            Issue.record("expected checksum mismatch")
+        } catch let error as KernelDownloader.Error {
+            if case .checksumMismatch(source, _, _) = error {
+                #expect(source.absoluteString == "https://example.com/kernel.tar.xz")
+            } else {
+                Issue.record("unexpected error: \(error)")
+            }
+        }
+    }
 }
