@@ -16,8 +16,13 @@ struct TrayMenu: View {
             .disabled(!viewModel.canStop)
         Button("Restart", action: viewModel.restart)
             .disabled(!viewModel.canRestart)
-        Button("Reset BuildKit state…", action: viewModel.resetState)
-            .disabled(!viewModel.canResetState)
+
+        Menu("Storage") {
+            Button("Prune BuildKit cache…", action: viewModel.pruneBuildKitCache)
+                .disabled(!viewModel.isRunning)
+            Button("Reset BuildKit state…", action: viewModel.resetState)
+                .disabled(!viewModel.canResetState)
+        }
 
         Divider()
 
@@ -31,7 +36,15 @@ struct TrayMenu: View {
                 pb.setString(ep.socketPath, forType: .string)
             }
             Menu("Use with…") {
-                Button("Add to docker buildx", action: viewModel.addToBuildx)
+                Text("buildx: \(viewModel.buildxStatus.displayText)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Divider()
+                Button("Add and use docker buildx builder", action: viewModel.addToBuildx)
+                Button("Refresh buildx status", action: viewModel.refreshBuildxStatus)
+                Button("Recreate buildx builder", action: viewModel.recreateBuildxBuilder)
+                Button("Remove buildx builder", action: viewModel.removeBuildxBuilder)
+                Divider()
                 Button("Copy `docker buildx create` command", action: viewModel.copyBuildxCreateCommand)
                 Button("Copy BUILDKIT_HOST env line", action: viewModel.copyBuildKitHostEnv)
             }

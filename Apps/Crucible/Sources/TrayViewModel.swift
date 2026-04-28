@@ -13,6 +13,7 @@ final class TrayViewModel: ObservableObject {
     @Published private(set) var lastInfo: String?
     @Published private(set) var progressMessage: String?
     @Published private(set) var logTail: [String] = []
+    @Published private(set) var buildxStatus: BuildxIntegration.BuilderStatus = .unknown
 
     let logStore = LogStore()
 
@@ -144,6 +145,11 @@ final class TrayViewModel: ObservableObject {
     /// when bbolt corruption ("structure needs cleaning") prevents
     /// startup.
     func resetState() {
+        guard confirm(
+            title: "Reset BuildKit state?",
+            message: "This stops BuildKit and deletes the persistent cache/metadata image. All cached build layers will be lost.",
+            confirmTitle: "Reset State"
+        ) else { return }
         Task { await run("resetState") { try await self.supervisor.resetState() } }
     }
 
@@ -209,8 +215,103 @@ final class TrayViewModel: ObservableObject {
                 case .failed(let stderr, let code):
                     self.lastError = "docker buildx create failed (exit \(code)):\n\(stderr)"
                     self.logStore.append(source: .buildx, level: .error, self.lastError ?? "")
+                case .useFailed(let stderr, let code):
+                    self.lastError = "docker buildx use failed (exit \(code)):\n\(stderr)"
+                    self.logStore.append(source: .buildx, level: .error, self.lastError ?? "")
                 }
                 Self.log.notice("addToBuildx -> \(String(describing: result), privacy: .public)")
+            }
+            self.refreshBuildxStatus()
+        }
+    }
+
+    func refreshBuildxStatus() {
+        Task { [buildx] in
+            let status = await buildx.status()
+            await MainActor.run {
+                self.buildxStatus = status
+                self.logStore.append(source: .buildx, level: .info, "buildx status: \(status.displayText)")
+            }
+        }
+    }
+
+    func recreateBuildxBuilder() {
+        guard let ep = endpoint else { return }
+        Task { [buildx] in
+            let result = await buildx.recreate(endpoint: ep)
+            await MainActor.run {
+                switch result {
+                case .created(let name):
+                    self.lastInfo = "Recreated '\(name)' buildx builder"
+                    self.lastError = nil
+                    self.logStore.append(source: .buildx, level: .info, self.lastInfo ?? "")
+                case .alreadyExists(let name):
+                    self.lastInfo = "'\(name)' already registered in buildx"
+                    self.lastError = nil
+                    self.logStore.append(source: .buildx, level: .info, self.lastInfo ?? "")
+                case .dockerNotFound:
+                    self.lastError = "docker not found. Install Docker Desktop, or copy the command and run it in a shell."
+                    self.logStore.append(source: .buildx, level: .error, self.lastError ?? "")
+                case .failed(let stderr, let code):
+                    self.lastError = "docker buildx recreate failed (exit \(code)):\n\(stderr)"
+                    self.logStore.append(source: .buildx, level: .error, self.lastError ?? "")
+                case .useFailed(let stderr, let code):
+                    self.lastError = "docker buildx use failed (exit \(code)):\n\(stderr)"
+                    self.logStore.append(source: .buildx, level: .error, self.lastError ?? "")
+                }
+            }
+            self.refreshBuildxStatus()
+        }
+    }
+
+    func removeBuildxBuilder() {
+        Task { [buildx] in
+            let result = await buildx.remove()
+            await MainActor.run {
+                switch result {
+                case .removed(let name):
+                    self.lastInfo = "Removed '\(name)' buildx builder"
+                    self.lastError = nil
+                    self.logStore.append(source: .buildx, level: .info, self.lastInfo ?? "")
+                case .notRegistered(let name):
+                    self.lastInfo = "'\(name)' buildx builder is not registered"
+                    self.lastError = nil
+                    self.logStore.append(source: .buildx, level: .info, self.lastInfo ?? "")
+                case .dockerNotFound:
+                    self.lastError = "docker not found."
+                    self.logStore.append(source: .buildx, level: .error, self.lastError ?? "")
+                case .failed(let stderr, let code):
+                    self.lastError = "docker buildx rm failed (exit \(code)):\n\(stderr)"
+                    self.logStore.append(source: .buildx, level: .error, self.lastError ?? "")
+                }
+            }
+            self.refreshBuildxStatus()
+        }
+    }
+
+    func pruneBuildKitCache() {
+        guard confirm(
+            title: "Prune BuildKit cache?",
+            message: "This removes unused BuildKit cache records. The state image file may not shrink on disk, but space is reclaimed inside the image.",
+            confirmTitle: "Prune Cache"
+        ) else { return }
+
+        Task { [buildx] in
+            let result = await buildx.prune()
+            await MainActor.run {
+                switch result {
+                case .pruned(let output):
+                    let text = output.trimmingCharacters(in: .whitespacesAndNewlines)
+                    self.lastInfo = text.isEmpty ? "BuildKit cache pruned" : text
+                    self.lastError = nil
+                    self.logStore.append(source: .buildx, level: .info, self.lastInfo ?? "BuildKit cache pruned")
+                case .dockerNotFound:
+                    self.lastError = "docker not found."
+                    self.logStore.append(source: .buildx, level: .error, self.lastError ?? "")
+                case .failed(let stderr, let code):
+                    self.lastError = "docker buildx prune failed (exit \(code)):\n\(stderr)"
+                    self.logStore.append(source: .buildx, level: .error, self.lastError ?? "")
+                }
             }
         }
     }
@@ -219,6 +320,16 @@ final class TrayViewModel: ObservableObject {
         let pb = NSPasteboard.general
         pb.clearContents()
         pb.setString(s, forType: .string)
+    }
+
+    private func confirm(title: String, message: String, confirmTitle: String) -> Bool {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: confirmTitle)
+        alert.addButton(withTitle: "Cancel")
+        return alert.runModal() == .alertFirstButtonReturn
     }
 
     /// Wire up subscriptions to the backend's three async streams. The

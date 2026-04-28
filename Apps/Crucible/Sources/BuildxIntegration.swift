@@ -9,9 +9,52 @@ import BuildKitCore
 /// with explicit argv to avoid quoting bugs around the host socket path,
 /// which contains a space.
 actor BuildxIntegration {
+    enum BuilderStatus: Sendable, Equatable {
+        case unknown
+        case dockerNotFound
+        case notRegistered
+        case running(version: String?, platforms: String?)
+        case inactive
+        case failed(String)
+
+        var displayText: String {
+            switch self {
+            case .unknown:
+                return "Unknown"
+            case .dockerNotFound:
+                return "Docker not found"
+            case .notRegistered:
+                return "Not registered"
+            case .running(let version, let platforms):
+                var parts = ["Connected"]
+                if let version, !version.isEmpty { parts.append(version) }
+                if let platforms, !platforms.isEmpty { parts.append(platforms) }
+                return parts.joined(separator: " · ")
+            case .inactive:
+                return "Registered, unreachable"
+            case .failed(let message):
+                return "Failed: \(message)"
+            }
+        }
+    }
+
     enum InstallResult: Sendable {
         case created(builderName: String)
         case alreadyExists(builderName: String)
+        case dockerNotFound
+        case failed(stderr: String, exitCode: Int32)
+        case useFailed(stderr: String, exitCode: Int32)
+    }
+
+    enum RemoveResult: Sendable {
+        case removed(builderName: String)
+        case notRegistered(builderName: String)
+        case dockerNotFound
+        case failed(stderr: String, exitCode: Int32)
+    }
+
+    enum PruneResult: Sendable {
+        case pruned(output: String)
         case dockerNotFound
         case failed(stderr: String, exitCode: Int32)
     }
@@ -76,7 +119,11 @@ actor BuildxIntegration {
         if inspect?.exitCode == 0 {
             // Optionally make it the default; the existing builder is left in place.
             if useAsDefault {
-                _ = await runCapturing(executable: docker, arguments: ["buildx", "use", builderName])
+                if let use = await runCapturing(executable: docker, arguments: ["buildx", "use", builderName]),
+                   use.exitCode != 0
+                {
+                    return .useFailed(stderr: use.stdout + use.stderr, exitCode: use.exitCode)
+                }
             }
             return .alreadyExists(builderName: builderName)
         }
@@ -95,9 +142,80 @@ actor BuildxIntegration {
         }
 
         if useAsDefault {
-            _ = await runCapturing(executable: docker, arguments: ["buildx", "use", builderName])
+            if let use = await runCapturing(executable: docker, arguments: ["buildx", "use", builderName]),
+               use.exitCode != 0
+            {
+                return .useFailed(stderr: use.stdout + use.stderr, exitCode: use.exitCode)
+            }
         }
         return .created(builderName: builderName)
+    }
+
+    func status(builderName: String = BuildxCommands.defaultBuilderName) async -> BuilderStatus {
+        guard let docker = await locateDocker() else { return .dockerNotFound }
+        guard let inspect = await runCapturing(
+            executable: docker,
+            arguments: ["buildx", "inspect", "--bootstrap", builderName]
+        ) else { return .failed("failed to run docker buildx inspect") }
+
+        let output = inspect.stdout + inspect.stderr
+        if inspect.exitCode != 0 {
+            if output.contains("no builder") || output.contains("not found") {
+                return .notRegistered
+            }
+            if output.localizedCaseInsensitiveContains("context deadline") {
+                return .inactive
+            }
+            return .failed(output.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+
+        let statusLine = Self.value(after: "Status:", in: output)
+        let version = Self.value(after: "BuildKit version:", in: output)
+        let platforms = Self.value(after: "Platforms:", in: output)
+        if statusLine?.localizedCaseInsensitiveContains("running") == true {
+            return .running(version: version, platforms: platforms)
+        }
+        if statusLine?.localizedCaseInsensitiveContains("inactive") == true {
+            return .inactive
+        }
+        return .unknown
+    }
+
+    func remove(builderName: String = BuildxCommands.defaultBuilderName) async -> RemoveResult {
+        guard let docker = await locateDocker() else { return .dockerNotFound }
+        guard let output = await runCapturing(
+            executable: docker,
+            arguments: BuildxCommands.dockerBuildxRemoveArguments(builderName: builderName)
+        ) else { return .failed(stderr: "failed to run docker buildx rm", exitCode: -1) }
+        let combined = output.stdout + output.stderr
+        if output.exitCode == 0 {
+            return .removed(builderName: builderName)
+        }
+        if combined.contains("no builder") || combined.contains("not found") {
+            return .notRegistered(builderName: builderName)
+        }
+        return .failed(stderr: combined, exitCode: output.exitCode)
+    }
+
+    func recreate(
+        endpoint: BuildKitEndpoint,
+        builderName: String = BuildxCommands.defaultBuilderName
+    ) async -> InstallResult {
+        _ = await remove(builderName: builderName)
+        return await install(endpoint: endpoint, builderName: builderName, useAsDefault: true)
+    }
+
+    func prune(builderName: String = BuildxCommands.defaultBuilderName) async -> PruneResult {
+        guard let docker = await locateDocker() else { return .dockerNotFound }
+        guard let output = await runCapturing(
+            executable: docker,
+            arguments: ["buildx", "prune", "--builder", builderName, "--force"]
+        ) else { return .failed(stderr: "failed to run docker buildx prune", exitCode: -1) }
+        let combined = output.stdout + output.stderr
+        if output.exitCode == 0 {
+            return .pruned(output: combined)
+        }
+        return .failed(stderr: combined, exitCode: output.exitCode)
     }
 
     // MARK: - Process exec helper
@@ -106,6 +224,16 @@ actor BuildxIntegration {
         var stdout: String
         var stderr: String
         var exitCode: Int32
+    }
+
+    private static func value(after prefix: String, in output: String) -> String? {
+        for line in output.split(separator: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard trimmed.hasPrefix(prefix) else { continue }
+            return trimmed.dropFirst(prefix.count)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return nil
     }
 
     private func runCapturing(executable: String, arguments: [String]) async -> ExecOutput? {
