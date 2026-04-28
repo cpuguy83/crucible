@@ -1,0 +1,65 @@
+import SwiftUI
+import AppKit
+import BuildKitCore
+
+struct TrayMenu: View {
+    @ObservedObject var viewModel: TrayViewModel
+
+    var body: some View {
+        Text(viewModel.statusText)
+
+        Divider()
+
+        Button("Start", action: viewModel.startFromMenu)
+            .disabled(!viewModel.canStart)
+        Button("Stop", action: viewModel.stop)
+            .disabled(!viewModel.canStop)
+        Button("Restart", action: viewModel.restart)
+            .disabled(!viewModel.canRestart)
+        Button("Reset BuildKit state…", action: viewModel.resetState)
+            .disabled(!viewModel.canResetState)
+
+        if let ep = viewModel.endpoint {
+            Divider()
+            Button("Copy socket path") {
+                let pb = NSPasteboard.general
+                pb.clearContents()
+                pb.setString(ep.socketPath, forType: .string)
+            }
+            Menu("Use with…") {
+                Button("Add to docker buildx", action: viewModel.addToBuildx)
+                Button("Copy `docker buildx create` command", action: viewModel.copyBuildxCreateCommand)
+                Button("Copy BUILDKIT_HOST env line", action: viewModel.copyBuildKitHostEnv)
+            }
+            .disabled(!viewModel.isRunning)
+        }
+
+        Divider()
+
+        if let info = viewModel.lastInfo {
+            Text(info)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+
+        if let err = viewModel.lastError {
+            Text("Error:")
+                .font(.caption.bold())
+            // Truncate visually but full text is one click away.
+            Text(err.prefix(140) + (err.count > 140 ? "…" : ""))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Button("Copy error to clipboard", action: viewModel.copyLastErrorToPasteboard)
+        }
+
+        if !viewModel.logTail.isEmpty {
+            Button("Copy last \(viewModel.logTail.count) log lines", action: viewModel.copyLogsToPasteboard)
+        }
+
+        Divider()
+        Button("Quit Crucible") {
+            NSApplication.shared.terminate(nil)
+        }
+        .keyboardShortcut("q")
+    }
+}

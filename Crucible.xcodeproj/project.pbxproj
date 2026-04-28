@@ -1,0 +1,383 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		55D1711B0F8678525B4ADEAC /* TrayViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8C79C6A411727E56CBF7DD3 /* TrayViewModel.swift */; };
+		8512D2BA431B0DD1C2DA60AC /* TrayMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBE7C0C64B38C3B627C04C57 /* TrayMenu.swift */; };
+		904D508FBC1EBCE08E494D51 /* BuildKitContainerization in Frameworks */ = {isa = PBXBuildFile; productRef = E4E1BBA347F1430883294763 /* BuildKitContainerization */; };
+		B0EF64E776A20E605E1561A8 /* BuildKitContainerCLI in Frameworks */ = {isa = PBXBuildFile; productRef = 87561BA819EF25A6D2C134B5 /* BuildKitContainerCLI */; };
+		B72D822815016EF0CF1539D8 /* CrucibleApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4958C4DA970F90DE612B90EC /* CrucibleApp.swift */; };
+		BE0991C4C1B15E5BBF99AE87 /* BuildKitCore in Frameworks */ = {isa = PBXBuildFile; productRef = 94D4BDFAB03909E67DC4C9D6 /* BuildKitCore */; };
+		C48B270EB6E6AE82AFD0B2CC /* BuildxIntegration.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8CA7A2A6FFE8BEB2E21E8DD /* BuildxIntegration.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		4958C4DA970F90DE612B90EC /* CrucibleApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrucibleApp.swift; sourceTree = "<group>"; };
+		784B055122285A953F5AE66D /* Crucible.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Crucible.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B74951F61660E212A4369A99 /* apple-buildkit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "apple-buildkit"; path = .; sourceTree = SOURCE_ROOT; };
+		D8CA7A2A6FFE8BEB2E21E8DD /* BuildxIntegration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildxIntegration.swift; sourceTree = "<group>"; };
+		F8C79C6A411727E56CBF7DD3 /* TrayViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrayViewModel.swift; sourceTree = "<group>"; };
+		FBE7C0C64B38C3B627C04C57 /* TrayMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrayMenu.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		9087CCB3A909C474CE5B3396 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BE0991C4C1B15E5BBF99AE87 /* BuildKitCore in Frameworks */,
+				904D508FBC1EBCE08E494D51 /* BuildKitContainerization in Frameworks */,
+				B0EF64E776A20E605E1561A8 /* BuildKitContainerCLI in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		13575C6F7B8AFFD0EFC134AA /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				B74951F61660E212A4369A99 /* apple-buildkit */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		20FA97683B88CEE6640E7CFF = {
+			isa = PBXGroup;
+			children = (
+				734089882DB6DE49EEF1602D /* Apps */,
+				13575C6F7B8AFFD0EFC134AA /* Packages */,
+				4F9849CB25D721E39B11AAC1 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		44B284D6AD1701ED5347612C /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				D8CA7A2A6FFE8BEB2E21E8DD /* BuildxIntegration.swift */,
+				4958C4DA970F90DE612B90EC /* CrucibleApp.swift */,
+				FBE7C0C64B38C3B627C04C57 /* TrayMenu.swift */,
+				F8C79C6A411727E56CBF7DD3 /* TrayViewModel.swift */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		4F9849CB25D721E39B11AAC1 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				784B055122285A953F5AE66D /* Crucible.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		734089882DB6DE49EEF1602D /* Apps */ = {
+			isa = PBXGroup;
+			children = (
+				7F86D7B1087C0EF76904FA61 /* Crucible */,
+			);
+			path = Apps;
+			sourceTree = "<group>";
+		};
+		7F86D7B1087C0EF76904FA61 /* Crucible */ = {
+			isa = PBXGroup;
+			children = (
+				44B284D6AD1701ED5347612C /* Sources */,
+			);
+			path = Crucible;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		782959D44EB7A6F0E815DA01 /* Crucible */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 41D6FDA456BF4F43A44673B7 /* Build configuration list for PBXNativeTarget "Crucible" */;
+			buildPhases = (
+				317F7FED868CF7E6E02AF3E5 /* Sources */,
+				9087CCB3A909C474CE5B3396 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Crucible;
+			packageProductDependencies = (
+				94D4BDFAB03909E67DC4C9D6 /* BuildKitCore */,
+				E4E1BBA347F1430883294763 /* BuildKitContainerization */,
+				87561BA819EF25A6D2C134B5 /* BuildKitContainerCLI */,
+			);
+			productName = Crucible;
+			productReference = 784B055122285A953F5AE66D /* Crucible.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		6972E013D9167119948D0F0E /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					782959D44EB7A6F0E815DA01 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Manual;
+					};
+				};
+			};
+			buildConfigurationList = 87C83AFBB323340113FD634C /* Build configuration list for PBXProject "Crucible" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 20FA97683B88CEE6640E7CFF;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				1D462D9582290619148E4151 /* XCLocalSwiftPackageReference "." */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 4F9849CB25D721E39B11AAC1 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				782959D44EB7A6F0E815DA01 /* Crucible */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		317F7FED868CF7E6E02AF3E5 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C48B270EB6E6AE82AFD0B2CC /* BuildxIntegration.swift in Sources */,
+				B72D822815016EF0CF1539D8 /* CrucibleApp.swift in Sources */,
+				8512D2BA431B0DD1C2DA60AC /* TrayMenu.swift in Sources */,
+				55D1711B0F8678525B4ADEAC /* TrayViewModel.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		567A2C92E3CF5E9233322324 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		634F137995A0B6F748A5C57F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Apps/Crucible/Resources/Crucible.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Apps/Crucible/Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.cpuguy83.Crucible;
+				PRODUCT_NAME = Crucible;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		6B7B7D9777B803843D185D4D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		AAB7A4BB3958D2A1B4DB91AC /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Apps/Crucible/Resources/Crucible.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Apps/Crucible/Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.cpuguy83.Crucible;
+				PRODUCT_NAME = Crucible;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		41D6FDA456BF4F43A44673B7 /* Build configuration list for PBXNativeTarget "Crucible" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				634F137995A0B6F748A5C57F /* Debug */,
+				AAB7A4BB3958D2A1B4DB91AC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		87C83AFBB323340113FD634C /* Build configuration list for PBXProject "Crucible" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6B7B7D9777B803843D185D4D /* Debug */,
+				567A2C92E3CF5E9233322324 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		1D462D9582290619148E4151 /* XCLocalSwiftPackageReference "." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = .;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		87561BA819EF25A6D2C134B5 /* BuildKitContainerCLI */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = BuildKitContainerCLI;
+		};
+		94D4BDFAB03909E67DC4C9D6 /* BuildKitCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = BuildKitCore;
+		};
+		E4E1BBA347F1430883294763 /* BuildKitContainerization */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = BuildKitContainerization;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 6972E013D9167119948D0F0E /* Project object */;
+}

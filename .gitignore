@@ -1,0 +1,25 @@
+## Swift / SwiftPM
+.build/
+.swiftpm/
+Package.resolved
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+DerivedData/
+build/
+*.xcuserstate
+
+## macOS
+.DS_Store
+
+## Build outputs
+build/
+dist/
+*.app.zip
+
+## Local app data / caches checked in by mistake
+Artifacts/
+
+## Editors
+.vscode/
+.idea/
+*.swp
