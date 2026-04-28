@@ -30,9 +30,7 @@
     (guest) at `~/Library/Application Support/Crucible/buildkitd.sock` (host).
   - `useInit = true` so signals/zombies are handled inside the container.
   - `container.create()` then `container.start()` launches buildkitd.
-  - In-guest health check: `container.exec("buildctl debug workers")` polled
-    until success or 60s timeout. Confirms kernel compatibility, daemon
-    readiness, and OCI worker health in one shot.
+  - Host-side unix socket readiness check polled until success or 60s timeout.
   - Background `wait()` task transitions to `.degraded` if buildkitd exits
     unexpectedly.
   - Graceful `stop()` / `restart()` / `pullImage()`.
@@ -44,32 +42,34 @@
   `BUILDKIT_HOST=unix://~/Library/Application\ Support/Crucible/buildkitd.sock buildctl debug workers`
   works from the host.
 
-## M3 — Tray actions wired to real backend
-- Replace `TrayViewModel`'s static state observation with subscriptions to
+## M3 — Tray actions wired to real backend ✅
+- `TrayViewModel` subscribes to
   `supervisor.stateStream()` / `progressStream()`.
-- "Pull / update image" menu action calling `supervisor.pullImage()`.
-- Logs window tailing `logStream`.
-- Error UX: surface `BuildKitBackendError` cases legibly.
+- Settings action calls `supervisor.pullImage()` for the applied BuildKit image.
+- Logs window tails `logStream`.
+- Error UX surfaces `BuildKitBackendError` cases legibly.
 
-## M4 — Settings window
+## M4 — Settings window ✅
 - Editable backend kind, image reference, init reference, host socket
   path, CPU, memory, kernel override, autostart.
-- Validation surfacing (already implemented in `BuildKitSettingsValidator`).
+- Validation surfacing via `BuildKitSettingsValidator`.
 - Persistence to `~/Library/Application Support/Crucible/settings.json`.
-- Live-reload behavior on save (stop/restart if backend kind changed).
+- Default-aware sparse config encoding and legacy default migration.
+- Live-reload behavior on save with guarded lifecycle transitions.
+- Buildx, storage, diagnostics, and reset management panes.
 
 ## M5 — CLI backend
 - `ContainerCLIBackend` real impl shelling out to `container`.
 - Discover binary, run `container run` + own host UDS exposure.
 
 ## M6 — Polish
-- Autostart via `SMAppService`.
-- Packaging script (`.app` zip), Developer ID signing config.
+- Autostart via `SMAppService`. ✅
+- Packaging script (`.app` zip).
+- Developer ID signing config.
 - Notarization plumbing.
 
 ## Later
 - Build history & active solves panel (gRPC `Control` API).
-- Cache prune UI.
 - Multi-instance / multi-version buildkitd.
 - SHA256 verification of the downloaded kernel tarball against a pinned
   digest (currently we trust the GitHub release URL).
