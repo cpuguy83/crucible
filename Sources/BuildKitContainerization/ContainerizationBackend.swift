@@ -252,6 +252,11 @@ public actor ContainerizationBackend: BuildKitBackend {
         switch state {
         case .stopped, .stopping:
             return
+        case .starting:
+            throw BuildKitBackendError.invalidState(
+                current: String(describing: state),
+                attempted: "stop"
+            )
         default:
             break
         }

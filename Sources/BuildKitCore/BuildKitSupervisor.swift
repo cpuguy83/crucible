@@ -32,10 +32,23 @@ public actor BuildKitSupervisor {
             )
         }
 
-        let backendChanged = new.backend != settings.backend
+        let settingsChanged = new != settings
+        if settingsChanged, let b = backend {
+            let current = await b.currentState()
+            switch current {
+            case .starting, .stopping:
+                throw BuildKitBackendError.invalidState(
+                    current: String(describing: current),
+                    attempted: "updateSettings"
+                )
+            default:
+                break
+            }
+        }
+
         settings = new
 
-        if backendChanged, let b = backend {
+        if settingsChanged, let b = backend {
             try? await b.stop()
             backend = nil
         }
