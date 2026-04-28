@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		35C741CF99B10A88355A0027 /* LogStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15504BF7A2219A6E8EC8FE2C /* LogStore.swift */; };
+		3DFB439DE461B7F7C1C7577D /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04F18C02F4E734BAE106BAB9 /* AppDelegate.swift */; };
 		55D1711B0F8678525B4ADEAC /* TrayViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8C79C6A411727E56CBF7DD3 /* TrayViewModel.swift */; };
 		8512D2BA431B0DD1C2DA60AC /* TrayMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBE7C0C64B38C3B627C04C57 /* TrayMenu.swift */; };
 		904D508FBC1EBCE08E494D51 /* BuildKitContainerization in Frameworks */ = {isa = PBXBuildFile; productRef = E4E1BBA347F1430883294763 /* BuildKitContainerization */; };
@@ -22,6 +23,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		04F18C02F4E734BAE106BAB9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		15504BF7A2219A6E8EC8FE2C /* LogStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogStore.swift; sourceTree = "<group>"; };
 		4958C4DA970F90DE612B90EC /* CrucibleApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrucibleApp.swift; sourceTree = "<group>"; };
 		65D7C4C8935AF60EE2E721AF /* LogsWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogsWindowView.swift; sourceTree = "<group>"; };
@@ -69,6 +71,7 @@
 		44B284D6AD1701ED5347612C /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				04F18C02F4E734BAE106BAB9 /* AppDelegate.swift */,
 				D8CA7A2A6FFE8BEB2E21E8DD /* BuildxIntegration.swift */,
 				4958C4DA970F90DE612B90EC /* CrucibleApp.swift */,
 				D61BAAB7D7CFE010A233B518 /* LogEvent.swift */,
@@ -172,6 +175,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3DFB439DE461B7F7C1C7577D /* AppDelegate.swift in Sources */,
 				C48B270EB6E6AE82AFD0B2CC /* BuildxIntegration.swift in Sources */,
 				B72D822815016EF0CF1539D8 /* CrucibleApp.swift in Sources */,
 				D9DF213E8FCAB9E19150ECDC /* LogEvent.swift in Sources */,

@@ -6,9 +6,14 @@ import Darwin
 
 @main
 struct CrucibleApp: App {
-    @StateObject private var viewModel = TrayViewModel()
+    @StateObject private var viewModel: TrayViewModel
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     init() {
+        let vm = TrayViewModel()
+        _viewModel = StateObject(wrappedValue: vm)
+        AppDelegate.viewModel = vm
+
         // The framework's host-side unix/vsock relay can write to a socket
         // after a build client closes its end. Darwin's default behavior for
         // that is process termination via SIGPIPE, which makes the app/VM

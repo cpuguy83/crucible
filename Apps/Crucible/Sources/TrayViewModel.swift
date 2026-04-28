@@ -21,6 +21,7 @@ final class TrayViewModel: ObservableObject {
     private let supervisor: BuildKitSupervisor
     private let buildx = BuildxIntegration()
     private var subscriberTask: Task<Void, Never>?
+    private var subscribedToBackend = false
     private var logWindowController: LogWindowController?
 
     init() {
@@ -104,8 +105,8 @@ final class TrayViewModel: ObservableObject {
     }
 
     func start() async {
-        await self.subscribeBackendStreams()
-        Task { await run("start") { try await self.supervisor.start() } }
+        await subscribeBackendStreamsIfNeeded()
+        await run("start") { try await self.supervisor.start() }
     }
 
     func startFromMenu() {
@@ -116,9 +117,24 @@ final class TrayViewModel: ObservableObject {
         Task { await run("stop") { try await self.supervisor.stop() } }
     }
 
+    func shutdownForTermination() async {
+        logStore.append(source: .supervisor, level: .info, "Application terminating; stopping BuildKit")
+        do {
+            try await supervisor.stop()
+            state = await supervisor.currentState()
+            lastError = nil
+            logStore.append(source: .supervisor, level: .info, "BuildKit stopped")
+        } catch {
+            let msg = String(describing: error)
+            lastError = msg
+            logStore.append(source: .supervisor, level: .error, "shutdown failed: \(msg)")
+            Self.log.error("shutdown failed: \(msg, privacy: .public)")
+        }
+    }
+
     func restart() {
         Task {
-            await self.subscribeBackendStreams()
+            await self.subscribeBackendStreamsIfNeeded()
             await run("restart") { try await self.supervisor.restart() }
         }
     }
@@ -209,9 +225,11 @@ final class TrayViewModel: ObservableObject {
     /// backend doesn't exist until `supervisor.start()` (or any other
     /// op) materializes it, so we re-fetch the streams every call and
     /// cancel any prior subscription task.
-    private func subscribeBackendStreams() async {
-        // Cancel previous; start() may be called again on restart.
-        subscriberTask?.cancel()
+    private func subscribeBackendStreamsIfNeeded() async {
+        // AsyncStream is not a broadcast log bus. Keep one long-lived
+        // consumer task attached to the backend streams instead of
+        // cancelling/recreating consumers across stop/start cycles.
+        guard !subscribedToBackend else { return }
 
         let streams: (
             state: AsyncStream<BuildKitState>,
@@ -224,12 +242,16 @@ final class TrayViewModel: ObservableObject {
             self.lastError = String(describing: error)
             return
         }
+        subscribedToBackend = true
 
         subscriberTask = Task { [weak self] in
             await withTaskGroup(of: Void.self) { group in
                 group.addTask { await self?.consumeState(streams.state) }
                 group.addTask { await self?.consumeProgress(streams.progress) }
                 group.addTask { await self?.consumeLogs(streams.logs) }
+            }
+            await MainActor.run {
+                self?.subscribedToBackend = false
             }
         }
     }
