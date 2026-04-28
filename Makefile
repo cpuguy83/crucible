@@ -1,4 +1,4 @@
-.PHONY: build test clean format lint project app run app-path
+.PHONY: build test clean format lint project app run app-path dist
 
 # SwiftPM library + test build (no app).
 build:
@@ -20,6 +20,12 @@ app: project
 # Print the path to the built .app.
 app-path:
 	@echo build/DerivedData/Build/Products/Debug/Crucible.app
+
+# Build a local distributable zip. This uses ad-hoc signing unless the Xcode
+# project is configured with a real signing identity.
+dist: app
+	mkdir -p build/dist
+	ditto -c -k --keepParent build/DerivedData/Build/Products/Debug/Crucible.app build/dist/Crucible.zip
 
 # Build then launch.
 run: app
