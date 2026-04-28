@@ -14,7 +14,7 @@ struct ContainerCLICommandsTests {
             containerID: "crucible-buildkitd",
             settings: settings,
             statePath: "/tmp/crucible-state",
-            configPath: nil
+            configDirectoryPath: nil
         )
 
         #expect(command.executable == "/opt/homebrew/bin/container")
@@ -32,10 +32,10 @@ struct ContainerCLICommandsTests {
             containerID: "crucible-buildkitd",
             settings: settings,
             statePath: "/tmp/crucible-state",
-            configPath: "/tmp/buildkitd.toml"
+            configDirectoryPath: "/tmp/buildkitd-config"
         )
 
-        #expect(command.arguments.contains("type=bind,source=/tmp/buildkitd.toml,target=/etc/buildkit/buildkitd.toml,readonly"))
+        #expect(command.arguments.contains("type=bind,source=/tmp/buildkitd-config,target=/etc/buildkit,readonly"))
         #expect(command.arguments.suffix(5) == ["/usr/bin/buildkitd", "--addr", "unix:///run/buildkit/buildkitd.sock", "--config", "/etc/buildkit/buildkitd.toml"])
     }
 
@@ -46,7 +46,7 @@ struct ContainerCLICommandsTests {
             containerID: "crucible-buildkitd",
             settings: settings,
             statePath: "/tmp/crucible-state",
-            configPath: nil
+            configDirectoryPath: nil
         )
 
         #expect(command.arguments.contains("--rosetta"))
@@ -55,5 +55,10 @@ struct ContainerCLICommandsTests {
     @Test func pullCommandUsesImageSubcommand() {
         let command = ContainerCLICommands.pullImage(binary: "/opt/homebrew/bin/container", image: "docker.io/moby/buildkit:buildx-stable-1")
         #expect(command.arguments == ["image", "pull", "docker.io/moby/buildkit:buildx-stable-1"])
+    }
+
+    @Test func systemStartDisablesInteractiveKernelInstall() {
+        let command = ContainerCLICommands.systemStart(binary: "/opt/homebrew/bin/container")
+        #expect(command.arguments == ["system", "start", "--disable-kernel-install", "--timeout", "30"])
     }
 }

@@ -52,18 +52,21 @@ public actor ContainerCLIBackend: BuildKitBackend {
             try FileManager.default.createDirectory(at: hostSocketURL.deletingLastPathComponent(), withIntermediateDirectories: true)
             try? FileManager.default.removeItem(at: hostSocketURL)
 
+            progressContinuation.yield(.init(phase: .pullingImage, message: "Ensuring container system service is running"))
+            _ = try await runProcess(ContainerCLICommands.systemStart(binary: containerBinaryPath))
+
             progressContinuation.yield(.init(phase: .pullingImage, message: "Removing stale CLI container"))
             _ = try? await runContainerCLI(["rm", Self.containerID])
 
             progressContinuation.yield(.init(phase: .pullingImage, message: "Starting container CLI backend"))
-            let configPath = try writeDaemonConfigIfNeeded()
+            let configDirectory = try writeDaemonConfigIfNeeded()
             try FileManager.default.createDirectory(at: cliStateDirectory, withIntermediateDirectories: true)
             let command = ContainerCLICommands.runDetachedBuildKit(
                 binary: containerBinaryPath,
                 containerID: Self.containerID,
                 settings: settings,
                 statePath: cliStateDirectory.path,
-                configPath: configPath?.path
+                configDirectoryPath: configDirectory?.path
             )
             _ = try await runProcess(command)
 
@@ -184,13 +187,15 @@ public actor ContainerCLIBackend: BuildKitBackend {
 
     private func writeDaemonConfigIfNeeded() throws -> URL? {
         let config = settings.effectiveDaemonConfigTOML().trimmingCharacters(in: .whitespacesAndNewlines)
-        let url = appRoot.appendingPathComponent("buildkitd.toml")
+        let dir = appRoot.appendingPathComponent("buildkitd-config", isDirectory: true)
+        let url = dir.appendingPathComponent("buildkitd.toml")
         if config.isEmpty {
-            try? FileManager.default.removeItem(at: url)
+            try? FileManager.default.removeItem(at: dir)
             return nil
         }
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try config.write(to: url, atomically: true, encoding: .utf8)
-        return url
+        return dir
     }
 
     private func runHealthCheck(hostSocketPath: String, timeoutSeconds: Double = 60) async throws {
@@ -252,7 +257,7 @@ public enum ContainerCLICommands {
         containerID: String,
         settings: BuildKitSettings,
         statePath: String,
-        configPath: String?
+        configDirectoryPath: String?
     ) -> Command {
         var args = [
             "run",
@@ -269,15 +274,15 @@ public enum ContainerCLICommands {
             args.append(contentsOf: ["--kernel", kernelOverridePath])
         }
         args.append("--rosetta")
-        if let configPath {
+        if let configDirectoryPath {
             args.append(contentsOf: [
-                "--mount", "type=bind,source=\(configPath),target=\(ContainerCLIBackend.daemonConfigGuestPath),readonly",
+                "--mount", "type=bind,source=\(configDirectoryPath),target=/etc/buildkit,readonly",
             ])
         }
 
         args.append(settings.imageReference)
         args.append(contentsOf: ["/usr/bin/buildkitd", "--addr", "unix:///run/buildkit/buildkitd.sock"])
-        if configPath != nil {
+        if configDirectoryPath != nil {
             args.append(contentsOf: ["--config", ContainerCLIBackend.daemonConfigGuestPath])
         }
         return .init(executable: binary, arguments: args)
@@ -289,5 +294,9 @@ public enum ContainerCLICommands {
 
     public static func logsFollow(binary: String, containerID: String) -> Command {
         .init(executable: binary, arguments: ["logs", "--follow", containerID])
+    }
+
+    public static func systemStart(binary: String) -> Command {
+        .init(executable: binary, arguments: ["system", "start", "--disable-kernel-install", "--timeout", "30"])
     }
 }

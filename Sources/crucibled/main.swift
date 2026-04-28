@@ -1,5 +1,6 @@
 import Foundation
 import BuildKitCore
+import BuildKitContainerCLI
 import BuildKitContainerization
 import Darwin
 
@@ -13,8 +14,35 @@ struct Main {
         // socket relay writes to a build client that has closed its end.
         signal(SIGPIPE, SIG_IGN)
 
-        let settings = BuildKitSettings()
-        let backend = ContainerizationBackend(settings: settings)
+        let args = CommandLine.arguments
+        let smoke = args.contains("--smoke")
+        let backendKind = Self.optionValue("--backend", in: args) ?? "framework"
+        var settings = Self.settings(for: backendKind)
+        if backendKind == "cli" || backendKind == "container-cli" {
+            do {
+                let kernel = try await KernelLocator.locateOrDownload(settings: settings) { progress in
+                    fputs("KERNEL[\(progress.phase)]: \(progress.bytesReceived)\n", stderr)
+                }
+                settings.kernelOverridePath = kernel.path
+            } catch {
+                fputs("failed to prepare CLI smoke kernel: \(error)\n", stderr)
+                exit(1)
+            }
+        }
+        let backend: any BuildKitBackend
+        switch backendKind {
+        case "framework", "containerization":
+            backend = ContainerizationBackend(settings: settings)
+        case "cli", "container-cli":
+            backend = ContainerCLIBackend(
+                settings: settings,
+                appRoot: FileManager.default.temporaryDirectory
+                    .appendingPathComponent("crucibled-cli-smoke", isDirectory: true)
+            )
+        default:
+            fputs("unknown --backend \(backendKind); expected framework or cli\n", stderr)
+            exit(2)
+        }
 
         // Subscribe before start() so we don't miss early events.
         let stateStream = backend.stateStream
@@ -33,10 +61,8 @@ struct Main {
             for await line in logStream { fputs("\(line)\n", stderr) }
         }
 
-        let smoke = CommandLine.arguments.contains("--smoke")
-
         do {
-            fputs("starting...\n", stderr)
+            fputs("starting \(backendKind)...\n", stderr)
             try await backend.start()
             if smoke {
                 fputs("started; smoke passed. stopping...\n", stderr)
@@ -56,5 +82,20 @@ struct Main {
             fputs("  userInfo=\(ns.userInfo)\n", stderr)
             exit(1)
         }
+    }
+
+    private static func optionValue(_ name: String, in args: [String]) -> String? {
+        guard let index = args.firstIndex(of: name), args.indices.contains(index + 1) else { return nil }
+        return args[index + 1]
+    }
+
+    private static func settings(for backend: String) -> BuildKitSettings {
+        guard backend == "cli" || backend == "container-cli" else { return BuildKitSettings() }
+        return BuildKitSettings(
+            backend: .containerCLI,
+            hostSocketPath: FileManager.default.temporaryDirectory
+                .appendingPathComponent("crucibled-cli-buildkitd.sock").path,
+            autoStart: false
+        )
     }
 }

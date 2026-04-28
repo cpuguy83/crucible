@@ -66,6 +66,7 @@ let package = Package(
             dependencies: [
                 "BuildKitCore",
                 "BuildKitContainerization",
+                "BuildKitContainerCLI",
             ],
             path: "Sources/crucibled"
         ),
