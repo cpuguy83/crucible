@@ -42,6 +42,7 @@ struct StorageUsage: Sendable, Equatable {
         let containers = base.appendingPathComponent("containers", isDirectory: true)
         let kernels = base.appendingPathComponent("kernels", isDirectory: true)
         let initfs = base.appendingPathComponent("initfs.ext4")
+        let daemonConfig = Self.daemonConfigURL()
 
         let stateSizes = fileSizes(at: state)
 
@@ -81,6 +82,12 @@ struct StorageUsage: Sendable, Equatable {
                     bytes: fileSizes(at: initfs)?.allocated,
                     detail: "vminitd/initfs ext4 image used to start and manage the guest VM."
                 ),
+                Area(
+                    name: "BuildKit daemon config",
+                    path: daemonConfig.path,
+                    bytes: fileSizes(at: daemonConfig)?.allocated,
+                    detail: "Generated buildkitd.toml mounted read-only into the guest when custom daemon config is set."
+                ),
             ]
         )
     }
@@ -89,6 +96,10 @@ struct StorageUsage: Sendable, Equatable {
         FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
             .appendingPathComponent("Crucible", isDirectory: true)
+    }
+
+    static func daemonConfigURL() -> URL {
+        appSupportDirectory().appendingPathComponent("buildkitd.toml")
     }
 
     static func format(_ bytes: Int64) -> String {

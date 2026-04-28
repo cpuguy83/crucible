@@ -102,6 +102,8 @@ final class TrayViewModel: ObservableObject {
     var canResetConfiguration: Bool { canFactoryReset }
     var canResetLocalState: Bool { canFactoryReset }
 
+    var daemonConfigPath: String { StorageUsage.daemonConfigURL().path }
+
     var statusText: String {
         switch state {
         case .stopped: return "Stopped"
@@ -460,6 +462,13 @@ final class TrayViewModel: ObservableObject {
                 )
             ]
 
+            let containerPath = ContainerCLICommands.defaultBinaryPath()
+            checks.append(PrerequisiteCheck(
+                name: "Apple container CLI",
+                status: FileManager.default.isExecutableFile(atPath: containerPath) ? .ok : .warning,
+                detail: FileManager.default.isExecutableFile(atPath: containerPath) ? containerPath : "Not found. Required only when the CLI backend is selected."
+            ))
+
             do {
                 let kernel = try KernelLocator.locate(settings: self.settingsDraft)
                 checks.append(PrerequisiteCheck(
@@ -486,6 +495,14 @@ final class TrayViewModel: ObservableObject {
                 self.logStore.append(source: .supervisor, level: .info, "Prerequisite check complete")
             }
         }
+    }
+
+    func loadExampleDaemonConfig() {
+        settingsDraft.daemonConfigTOML = BuildKitSettings.exampleDaemonConfigTOML
+    }
+
+    func openDaemonConfigInFinder() {
+        NSWorkspace.shared.activateFileViewerSelecting([StorageUsage.daemonConfigURL()])
     }
 
     private func validationMessage(for issue: BuildKitSettingsValidator.Issue) -> String {

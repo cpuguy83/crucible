@@ -130,12 +130,11 @@ struct SettingsWindowView: View {
             settingLabel("How Crucible starts BuildKit", "The framework backend links Apple Containerization directly. The CLI backend is intended for users who explicitly want to drive Apple's `container` binary.")
             Picker("Backend", selection: $viewModel.settingsDraft.backend) {
                 Text("Apple Containerization framework").tag(BuildKitSettings.BackendKind.containerization)
-                Text("Apple container CLI (not implemented)")
+                Text("Apple container CLI")
                     .tag(BuildKitSettings.BackendKind.containerCLI)
-                    .disabled(true)
             }
             .pickerStyle(.radioGroup)
-            Text("The CLI backend is planned, but not available in this build.")
+            Text("The CLI backend shells out to Apple's `container` binary and is useful for comparing Crucible against the upstream command-line runtime.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -185,14 +184,27 @@ struct SettingsWindowView: View {
                         .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
                 )
             HStack {
+                Button("Load Example") {
+                    viewModel.loadExampleDaemonConfig()
+                }
                 Button("Clear Config") {
                     viewModel.settingsDraft.daemonConfigTOML = ""
                 }
                 .disabled(viewModel.settingsDraft.daemonConfigTOML.isEmpty)
+                Button("Copy Path") {
+                    copy(viewModel.daemonConfigPath)
+                }
+                Button("Reveal File") {
+                    viewModel.openDaemonConfigInFinder()
+                }
                 Text("Changes apply when settings are applied and BuildKit restarts.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            Text(viewModel.daemonConfigPath)
+                .font(.caption.monospaced())
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
         }
     }
 
