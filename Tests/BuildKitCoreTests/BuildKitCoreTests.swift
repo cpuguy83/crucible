@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import BuildKitCore
 
@@ -6,6 +7,43 @@ struct SettingsValidatorTests {
     @Test func defaultsAreValid() {
         let s = BuildKitSettings()
         #expect(BuildKitSettingsValidator.validate(s).isEmpty)
+    }
+
+    @Test func defaultsEncodeAsEmptyConfiguration() throws {
+        let data = try JSONEncoder().encode(BuildKitSettings())
+        let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(object.isEmpty)
+    }
+
+    @Test func missingConfigurationKeysDecodeToCurrentDefaults() throws {
+        let settings = try JSONDecoder().decode(BuildKitSettings.self, from: Data("{}".utf8))
+        #expect(settings == BuildKitSettings())
+    }
+
+    @Test func legacyLatestDefaultMigratesToBuildxStableDefault() throws {
+        let json = #"{"imageReference":"docker.io/moby/buildkit:latest"}"#
+        let settings = try JSONDecoder().decode(BuildKitSettings.self, from: Data(json.utf8))
+        #expect(settings.imageReference == BuildKitSettings.defaultImageReference)
+    }
+
+    @Test func customImageReferenceStillEncodes() throws {
+        var settings = BuildKitSettings()
+        settings.imageReference = "docker.io/moby/buildkit:v0.13.2"
+
+        let data = try JSONEncoder().encode(settings)
+        let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(object["imageReference"] as? String == "docker.io/moby/buildkit:v0.13.2")
+        #expect(object["cpuCount"] == nil)
+    }
+
+    @Test func disabledAutoStartEncodes() throws {
+        var settings = BuildKitSettings()
+        settings.autoStart = false
+
+        let data = try JSONEncoder().encode(settings)
+        let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let autoStart = try #require(object["autoStart"] as? Bool)
+        #expect(autoStart == false)
     }
 
     @Test func containerCLIBackendRejectedUntilImplemented() {

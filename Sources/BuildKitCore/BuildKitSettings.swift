@@ -5,6 +5,9 @@ import Foundation
 /// Persisted by the app as JSON under
 /// `~/Library/Application Support/Crucible/settings.json`.
 public struct BuildKitSettings: Sendable, Equatable, Codable {
+    public static let defaultImageReference = "docker.io/moby/buildkit:buildx-stable-1"
+    public static let legacyDefaultImageReference = "docker.io/moby/buildkit:latest"
+
     /// Which backend implementation to use.
     public enum BackendKind: String, Sendable, Codable, CaseIterable {
         /// Default. Links apple/containerization directly.
@@ -42,22 +45,63 @@ public struct BuildKitSettings: Sendable, Equatable, Codable {
 
     public init(
         backend: BackendKind = .containerization,
-        imageReference: String = "docker.io/moby/buildkit:latest",
+        imageReference: String = BuildKitSettings.defaultImageReference,
         initfsReference: String = "ghcr.io/apple/containerization/vminit:0.31.0",
         hostSocketPath: String = BuildKitSettings.defaultHostSocketPath(),
         cpuCount: Int = 4,
         memoryMiB: Int = 4096,
         kernelOverridePath: String? = nil,
-        autoStart: Bool = false
+        autoStart: Bool = true
     ) {
         self.backend = backend
-        self.imageReference = imageReference
+        self.imageReference = imageReference == Self.legacyDefaultImageReference ? Self.defaultImageReference : imageReference
         self.initfsReference = initfsReference
         self.hostSocketPath = hostSocketPath
         self.cpuCount = cpuCount
         self.memoryMiB = memoryMiB
         self.kernelOverridePath = kernelOverridePath
         self.autoStart = autoStart
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case backend
+        case imageReference
+        case initfsReference
+        case hostSocketPath
+        case cpuCount
+        case memoryMiB
+        case kernelOverridePath
+        case autoStart
+    }
+
+    public init(from decoder: Decoder) throws {
+        let defaults = BuildKitSettings()
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let decodedImageReference = try c.decodeIfPresent(String.self, forKey: .imageReference) ?? defaults.imageReference
+        self.init(
+            backend: try c.decodeIfPresent(BackendKind.self, forKey: .backend) ?? defaults.backend,
+            imageReference: decodedImageReference,
+            initfsReference: try c.decodeIfPresent(String.self, forKey: .initfsReference) ?? defaults.initfsReference,
+            hostSocketPath: try c.decodeIfPresent(String.self, forKey: .hostSocketPath) ?? defaults.hostSocketPath,
+            cpuCount: try c.decodeIfPresent(Int.self, forKey: .cpuCount) ?? defaults.cpuCount,
+            memoryMiB: try c.decodeIfPresent(Int.self, forKey: .memoryMiB) ?? defaults.memoryMiB,
+            kernelOverridePath: try c.decodeIfPresent(String.self, forKey: .kernelOverridePath) ?? defaults.kernelOverridePath,
+            autoStart: try c.decodeIfPresent(Bool.self, forKey: .autoStart) ?? defaults.autoStart
+        )
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        let defaults = BuildKitSettings()
+        var c = encoder.container(keyedBy: CodingKeys.self)
+
+        if backend != defaults.backend { try c.encode(backend, forKey: .backend) }
+        if imageReference != defaults.imageReference { try c.encode(imageReference, forKey: .imageReference) }
+        if initfsReference != defaults.initfsReference { try c.encode(initfsReference, forKey: .initfsReference) }
+        if hostSocketPath != defaults.hostSocketPath { try c.encode(hostSocketPath, forKey: .hostSocketPath) }
+        if cpuCount != defaults.cpuCount { try c.encode(cpuCount, forKey: .cpuCount) }
+        if memoryMiB != defaults.memoryMiB { try c.encode(memoryMiB, forKey: .memoryMiB) }
+        if kernelOverridePath != defaults.kernelOverridePath { try c.encode(kernelOverridePath, forKey: .kernelOverridePath) }
+        if autoStart != defaults.autoStart { try c.encode(autoStart, forKey: .autoStart) }
     }
 
     public static func defaultHostSocketPath() -> String {

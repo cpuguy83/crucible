@@ -40,7 +40,7 @@
 ### M2 outstanding
 - **Acceptance test on real Apple silicon hardware**: requires network access
   to fetch the Kata kernel tarball (~140 MiB compressed, first run only),
-  the vminit OCI image, and `docker.io/moby/buildkit:latest`. Verify
+  the vminit OCI image, and `docker.io/moby/buildkit:buildx-stable-1`. Verify
   `BUILDKIT_HOST=unix://~/Library/Application\ Support/Crucible/buildkitd.sock buildctl debug workers`
   works from the host.
 

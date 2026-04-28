@@ -28,7 +28,7 @@ colima in the picture.
 - **Crucible.app** — SwiftUI `MenuBarExtra` tray UI.
 
 BuildKit runs as a single long-lived container using the upstream
-`moby/buildkit` image (user-overridable). The kernel comes from
+`moby/buildkit:buildx-stable-1` image (user-overridable). The kernel comes from
 `apple/containerization`'s optimized default kernel.
 
 ## Repository layout
