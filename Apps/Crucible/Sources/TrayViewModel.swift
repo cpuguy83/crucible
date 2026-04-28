@@ -511,6 +511,8 @@ final class TrayViewModel: ObservableObject {
             }
         case .daemonConfigTooLarge(let bytes):
             return "BuildKit daemon config must be 256 KiB or smaller (currently \(bytes) bytes)."
+        case .daemonConfigMalformed(let detail):
+            return "BuildKit daemon config looks invalid: \(detail)."
         }
     }
 

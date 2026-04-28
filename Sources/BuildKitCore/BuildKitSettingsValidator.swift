@@ -11,6 +11,7 @@ public enum BuildKitSettingsValidator {
         case memoryOutOfRange(Int)
         case backendUnavailable(BuildKitSettings.BackendKind)
         case daemonConfigTooLarge(Int)
+        case daemonConfigMalformed(String)
     }
 
     public static func validate(_ s: BuildKitSettings) -> [Issue] {
@@ -44,9 +45,65 @@ public enum BuildKitSettingsValidator {
         let configBytes = s.daemonConfigTOML.utf8.count
         if configBytes > 256 * 1024 {
             issues.append(.daemonConfigTooLarge(configBytes))
+        } else if let issue = validateDaemonConfigShape(s.daemonConfigTOML) {
+            issues.append(.daemonConfigMalformed(issue))
         }
 
         return issues
+    }
+
+    static func validateDaemonConfigShape(_ config: String) -> String? {
+        let trimmed = config.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        for (index, rawLine) in config.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
+            let lineNumber = index + 1
+            let line = String(rawLine).trimmingCharacters(in: .whitespaces)
+            if line.isEmpty || line.hasPrefix("#") { continue }
+
+            if let quoteIssue = validateQuotes(line) {
+                return "line \(lineNumber): \(quoteIssue)"
+            }
+
+            if line.hasPrefix("[") {
+                guard line.hasSuffix("]") else { return "line \(lineNumber): section header is missing closing ]" }
+                var inner = line
+                while inner.hasPrefix("[") { inner.removeFirst() }
+                while inner.hasSuffix("]") { inner.removeLast() }
+                if inner.trimmingCharacters(in: CharacterSet.whitespaces).isEmpty {
+                    return "line \(lineNumber): section header is empty"
+                }
+                continue
+            }
+
+            if line.contains("=") { continue }
+            return "line \(lineNumber): expected key = value or [section]"
+        }
+
+        return nil
+    }
+
+    private static func validateQuotes(_ line: String) -> String? {
+        var single = false
+        var double = false
+        var escaped = false
+
+        for ch in line {
+            if escaped {
+                escaped = false
+                continue
+            }
+            if double && ch == "\\" {
+                escaped = true
+                continue
+            }
+            if ch == "'" && !double { single.toggle() }
+            if ch == "\"" && !single { double.toggle() }
+        }
+
+        if single { return "unterminated single-quoted string" }
+        if double { return "unterminated double-quoted string" }
+        return nil
     }
 
     /// Cheap structural check. Real OCI reference parsing is delegated to the

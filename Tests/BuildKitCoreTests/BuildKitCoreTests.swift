@@ -51,6 +51,23 @@ struct SettingsValidatorTests {
         #expect(BuildKitSettingsValidator.validate(settings).contains(.daemonConfigTooLarge(256 * 1024 + 1)))
     }
 
+    @Test func malformedDaemonConfigRejected() {
+        var settings = BuildKitSettings()
+        settings.daemonConfigTOML = "[worker.oci\n  max-parallelism = 4\n"
+        #expect(BuildKitSettingsValidator.validate(settings).contains(.daemonConfigMalformed("line 1: section header is missing closing ]")))
+    }
+
+    @Test func plausibleDaemonConfigAccepted() {
+        var settings = BuildKitSettings()
+        settings.daemonConfigTOML = """
+        debug = true
+
+        [worker.oci]
+          max-parallelism = 4
+        """
+        #expect(BuildKitSettingsValidator.validate(settings).isEmpty)
+    }
+
     @Test func disabledAutoStartEncodes() throws {
         var settings = BuildKitSettings()
         settings.autoStart = false
