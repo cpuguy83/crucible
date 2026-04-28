@@ -33,9 +33,18 @@ struct Main {
             for await line in logStream { fputs("\(line)\n", stderr) }
         }
 
+        let smoke = CommandLine.arguments.contains("--smoke")
+
         do {
             fputs("starting...\n", stderr)
             try await backend.start()
+            if smoke {
+                fputs("started; smoke passed. stopping...\n", stderr)
+                try await backend.stop()
+                fputs("stopped.\n", stderr)
+                return
+            }
+
             fputs("started; running. Ctrl-C to stop.\n", stderr)
             // Idle.
             try await Task.sleep(nanoseconds: UInt64.max / 2)
