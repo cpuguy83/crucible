@@ -8,6 +8,12 @@ struct SettingsValidatorTests {
         #expect(BuildKitSettingsValidator.validate(s).isEmpty)
     }
 
+    @Test func containerCLIBackendRejectedUntilImplemented() {
+        var s = BuildKitSettings()
+        s.backend = .containerCLI
+        #expect(BuildKitSettingsValidator.validate(s).contains(.backendUnavailable(.containerCLI)))
+    }
+
     @Test func emptyImageReferenceRejected() {
         var s = BuildKitSettings()
         s.imageReference = ""

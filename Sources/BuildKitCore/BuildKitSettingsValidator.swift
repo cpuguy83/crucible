@@ -9,6 +9,7 @@ public enum BuildKitSettingsValidator {
         case socketPathNotAbsolute(String)
         case cpuCountOutOfRange(Int)
         case memoryOutOfRange(Int)
+        case backendUnavailable(BuildKitSettings.BackendKind)
     }
 
     public static func validate(_ s: BuildKitSettings) -> [Issue] {
@@ -33,6 +34,10 @@ public enum BuildKitSettingsValidator {
 
         if s.memoryMiB < 512 || s.memoryMiB > 256 * 1024 {
             issues.append(.memoryOutOfRange(s.memoryMiB))
+        }
+
+        if s.backend == .containerCLI {
+            issues.append(.backendUnavailable(.containerCLI))
         }
 
         return issues
