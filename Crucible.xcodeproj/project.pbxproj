@@ -7,15 +7,21 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		2CFF7ED62F0B3CF63D7AF43B /* SettingsWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA883ACE2B7E6EA5C438F67C /* SettingsWindowView.swift */; };
 		35C741CF99B10A88355A0027 /* LogStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15504BF7A2219A6E8EC8FE2C /* LogStore.swift */; };
 		3DFB439DE461B7F7C1C7577D /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04F18C02F4E734BAE106BAB9 /* AppDelegate.swift */; };
+		4FF6FBB69A273CD06E380137 /* SettingsWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC04DD925107E36490C76675 /* SettingsWindowController.swift */; };
 		55D1711B0F8678525B4ADEAC /* TrayViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8C79C6A411727E56CBF7DD3 /* TrayViewModel.swift */; };
 		8512D2BA431B0DD1C2DA60AC /* TrayMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBE7C0C64B38C3B627C04C57 /* TrayMenu.swift */; };
 		904D508FBC1EBCE08E494D51 /* BuildKitContainerization in Frameworks */ = {isa = PBXBuildFile; productRef = E4E1BBA347F1430883294763 /* BuildKitContainerization */; };
+		9E38E529D4212934120FA3A8 /* LoginItemManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE6356A493ADF9F4EB5367E5 /* LoginItemManager.swift */; };
+		B03E491C4F00485DE9346D3B /* PrerequisiteCheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = 079AE4308C241EA8041303D6 /* PrerequisiteCheck.swift */; };
 		B0EF64E776A20E605E1561A8 /* BuildKitContainerCLI in Frameworks */ = {isa = PBXBuildFile; productRef = 87561BA819EF25A6D2C134B5 /* BuildKitContainerCLI */; };
 		B53C03DA415F9FAB56D43FF1 /* LogsWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65D7C4C8935AF60EE2E721AF /* LogsWindowView.swift */; };
 		B72D822815016EF0CF1539D8 /* CrucibleApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4958C4DA970F90DE612B90EC /* CrucibleApp.swift */; };
+		B7F2E884B691EBE9DD7A6BCE /* AppSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E539DED7BC52E9368C3CF0F7 /* AppSettingsStore.swift */; };
 		BE0991C4C1B15E5BBF99AE87 /* BuildKitCore in Frameworks */ = {isa = PBXBuildFile; productRef = 94D4BDFAB03909E67DC4C9D6 /* BuildKitCore */; };
+		BEA4A647CEB1E76F526CA4F6 /* HostResourceLimits.swift in Sources */ = {isa = PBXBuildFile; fileRef = 912D69A974EF1420BEC134FD /* HostResourceLimits.swift */; };
 		C48B270EB6E6AE82AFD0B2CC /* BuildxIntegration.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8CA7A2A6FFE8BEB2E21E8DD /* BuildxIntegration.swift */; };
 		D574EEB5965493DFA8C68DC6 /* LogTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92CFDF081682E78F12D263DB /* LogTextView.swift */; };
 		D65C724C93CA6F57F1D48917 /* StorageUsage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8266C91A13F97748BA1A66E7 /* StorageUsage.swift */; };
@@ -25,16 +31,22 @@
 
 /* Begin PBXFileReference section */
 		04F18C02F4E734BAE106BAB9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		079AE4308C241EA8041303D6 /* PrerequisiteCheck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrerequisiteCheck.swift; sourceTree = "<group>"; };
 		15504BF7A2219A6E8EC8FE2C /* LogStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogStore.swift; sourceTree = "<group>"; };
 		4958C4DA970F90DE612B90EC /* CrucibleApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrucibleApp.swift; sourceTree = "<group>"; };
 		65D7C4C8935AF60EE2E721AF /* LogsWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogsWindowView.swift; sourceTree = "<group>"; };
 		784B055122285A953F5AE66D /* Crucible.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Crucible.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8266C91A13F97748BA1A66E7 /* StorageUsage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageUsage.swift; sourceTree = "<group>"; };
+		912D69A974EF1420BEC134FD /* HostResourceLimits.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostResourceLimits.swift; sourceTree = "<group>"; };
 		92CFDF081682E78F12D263DB /* LogTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogTextView.swift; sourceTree = "<group>"; };
+		AE6356A493ADF9F4EB5367E5 /* LoginItemManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginItemManager.swift; sourceTree = "<group>"; };
 		B74951F61660E212A4369A99 /* apple-buildkit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "apple-buildkit"; path = .; sourceTree = SOURCE_ROOT; };
 		C8BF14F272CC999F8BF0E626 /* LogWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogWindowController.swift; sourceTree = "<group>"; };
+		CA883ACE2B7E6EA5C438F67C /* SettingsWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindowView.swift; sourceTree = "<group>"; };
+		CC04DD925107E36490C76675 /* SettingsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindowController.swift; sourceTree = "<group>"; };
 		D61BAAB7D7CFE010A233B518 /* LogEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogEvent.swift; sourceTree = "<group>"; };
 		D8CA7A2A6FFE8BEB2E21E8DD /* BuildxIntegration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildxIntegration.swift; sourceTree = "<group>"; };
+		E539DED7BC52E9368C3CF0F7 /* AppSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettingsStore.swift; sourceTree = "<group>"; };
 		F8C79C6A411727E56CBF7DD3 /* TrayViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrayViewModel.swift; sourceTree = "<group>"; };
 		FBE7C0C64B38C3B627C04C57 /* TrayMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrayMenu.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -74,13 +86,19 @@
 			isa = PBXGroup;
 			children = (
 				04F18C02F4E734BAE106BAB9 /* AppDelegate.swift */,
+				E539DED7BC52E9368C3CF0F7 /* AppSettingsStore.swift */,
 				D8CA7A2A6FFE8BEB2E21E8DD /* BuildxIntegration.swift */,
 				4958C4DA970F90DE612B90EC /* CrucibleApp.swift */,
+				912D69A974EF1420BEC134FD /* HostResourceLimits.swift */,
 				D61BAAB7D7CFE010A233B518 /* LogEvent.swift */,
+				AE6356A493ADF9F4EB5367E5 /* LoginItemManager.swift */,
 				15504BF7A2219A6E8EC8FE2C /* LogStore.swift */,
 				65D7C4C8935AF60EE2E721AF /* LogsWindowView.swift */,
 				92CFDF081682E78F12D263DB /* LogTextView.swift */,
 				C8BF14F272CC999F8BF0E626 /* LogWindowController.swift */,
+				079AE4308C241EA8041303D6 /* PrerequisiteCheck.swift */,
+				CC04DD925107E36490C76675 /* SettingsWindowController.swift */,
+				CA883ACE2B7E6EA5C438F67C /* SettingsWindowView.swift */,
 				8266C91A13F97748BA1A66E7 /* StorageUsage.swift */,
 				FBE7C0C64B38C3B627C04C57 /* TrayMenu.swift */,
 				F8C79C6A411727E56CBF7DD3 /* TrayViewModel.swift */,
@@ -179,13 +197,19 @@
 			buildActionMask = 2147483647;
 			files = (
 				3DFB439DE461B7F7C1C7577D /* AppDelegate.swift in Sources */,
+				B7F2E884B691EBE9DD7A6BCE /* AppSettingsStore.swift in Sources */,
 				C48B270EB6E6AE82AFD0B2CC /* BuildxIntegration.swift in Sources */,
 				B72D822815016EF0CF1539D8 /* CrucibleApp.swift in Sources */,
+				BEA4A647CEB1E76F526CA4F6 /* HostResourceLimits.swift in Sources */,
 				D9DF213E8FCAB9E19150ECDC /* LogEvent.swift in Sources */,
 				35C741CF99B10A88355A0027 /* LogStore.swift in Sources */,
 				D574EEB5965493DFA8C68DC6 /* LogTextView.swift in Sources */,
 				F5F2067B68EC381B8D515086 /* LogWindowController.swift in Sources */,
+				9E38E529D4212934120FA3A8 /* LoginItemManager.swift in Sources */,
 				B53C03DA415F9FAB56D43FF1 /* LogsWindowView.swift in Sources */,
+				B03E491C4F00485DE9346D3B /* PrerequisiteCheck.swift in Sources */,
+				4FF6FBB69A273CD06E380137 /* SettingsWindowController.swift in Sources */,
+				2CFF7ED62F0B3CF63D7AF43B /* SettingsWindowView.swift in Sources */,
 				D65C724C93CA6F57F1D48917 /* StorageUsage.swift in Sources */,
 				8512D2BA431B0DD1C2DA60AC /* TrayMenu.swift in Sources */,
 				55D1711B0F8678525B4ADEAC /* TrayViewModel.swift in Sources */,

@@ -10,11 +10,14 @@ import os
 final class TrayViewModel: ObservableObject {
     @Published private(set) var state: BuildKitState = .stopped
     @Published private(set) var lastError: String?
-    @Published private(set) var lastInfo: String?
     @Published private(set) var progressMessage: String?
     @Published private(set) var logTail: [String] = []
     @Published private(set) var buildxStatus: BuildxIntegration.BuilderStatus = .unknown
     @Published private(set) var storageUsage: StorageUsage?
+    @Published private(set) var appliedSettings: BuildKitSettings
+    @Published var launchAtLoginEnabled: Bool
+    @Published var settingsDraft: BuildKitSettings
+    @Published private(set) var prerequisiteChecks: [PrerequisiteCheck] = []
 
     let logStore = LogStore()
 
@@ -25,9 +28,13 @@ final class TrayViewModel: ObservableObject {
     private var subscriberTask: Task<Void, Never>?
     private var subscribedToBackend = false
     private var logWindowController: LogWindowController?
+    private var settingsWindowController: SettingsWindowController?
 
     init() {
-        let settings = BuildKitSettings()
+        let settings = AppSettingsStore.load()
+        self.appliedSettings = settings
+        self.settingsDraft = settings
+        self.launchAtLoginEnabled = LoginItemManager.isEnabled
         self.supervisor = BuildKitSupervisor(settings: settings) { s in
             switch s.backend {
             case .containerization:
@@ -38,7 +45,9 @@ final class TrayViewModel: ObservableObject {
         }
 
         refreshStorageUsage()
-        Task { await self.start() }
+        if settings.autoStart {
+            Task { await self.start() }
+        }
     }
 
     var canStart: Bool {
@@ -52,9 +61,9 @@ final class TrayViewModel: ObservableObject {
 
     var canStop: Bool {
         switch state {
-        case .starting, .running, .degraded:
+        case .running, .degraded:
             return true
-        case .stopped, .stopping, .error:
+        case .stopped, .starting, .stopping, .error:
             return false
         }
     }
@@ -178,20 +187,183 @@ final class TrayViewModel: ObservableObject {
         Endpoint: \(endpoint?.url ?? "none")
         Storage: \(storageUsage?.displayText ?? "not created")
         Last error: \(lastError ?? "none")
-        Last info: \(lastInfo ?? "none")
 
         Recent logs:
         \(recentLogs)
         """
         copyToPasteboard(summary)
-        lastInfo = "Copied diagnostics summary"
+        logStore.append(source: .supervisor, level: .info, "Copied diagnostics summary")
     }
 
     func openLogsWindow() {
         if logWindowController == nil {
-            logWindowController = LogWindowController(store: logStore)
+            logWindowController = LogWindowController(store: logStore) { [weak self] in
+                self?.logWindowController = nil
+            }
         }
         logWindowController?.show()
+    }
+
+    func openSettingsWindow() {
+        if settingsWindowController == nil {
+            settingsWindowController = SettingsWindowController(viewModel: self) { [weak self] in
+                self?.settingsWindowController = nil
+            }
+        }
+        settingsWindowController?.show()
+    }
+
+    var settingsDirty: Bool { settingsDraft != appliedSettings }
+
+    var settingsValidationMessages: [String] {
+        var messages = BuildKitSettingsValidator.validate(settingsDraft).map(validationMessage(for:))
+        if let path = settingsDraft.kernelOverridePath, !path.isEmpty {
+            var isDirectory: ObjCBool = false
+            let exists = FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory)
+            if !exists {
+                messages.append("Kernel override path does not exist.")
+            } else if isDirectory.boolValue {
+                messages.append("Kernel override path must point to a file, not a directory.")
+            } else if let attrs = try? FileManager.default.attributesOfItem(atPath: path),
+                      let size = attrs[.size] as? NSNumber,
+                      size.int64Value == 0
+            {
+                messages.append("Kernel override file is empty.")
+            }
+        }
+        return messages
+    }
+
+    var canSaveSettings: Bool {
+        settingsDirty && settingsValidationMessages.isEmpty && !settingsApplyBlocked
+    }
+
+    var settingsApplyBlocked: Bool {
+        switch state {
+        case .starting, .stopping:
+            return true
+        case .stopped, .running, .degraded, .error:
+            return false
+        }
+    }
+
+    func saveSettings() {
+        let newSettings = settingsDraft
+        Task {
+            do {
+                let shouldRestart = self.isRunning
+                try await self.supervisor.updateSettings(newSettings)
+                try AppSettingsStore.save(newSettings)
+                self.appliedSettings = newSettings
+                self.subscribedToBackend = false
+                self.subscriberTask?.cancel()
+                self.subscriberTask = nil
+                self.state = await supervisor.currentState()
+                let notice = shouldRestart ? "Applied settings; restarting BuildKit" : "Applied settings"
+                self.lastError = nil
+                self.logStore.append(source: .supervisor, level: .info, notice)
+                if shouldRestart || newSettings.autoStart {
+                    await self.start()
+                }
+            } catch {
+                self.lastError = String(describing: error)
+                self.logStore.append(source: .supervisor, level: .error, "settings save failed: \(String(describing: error))")
+            }
+        }
+    }
+
+    func revertSettingsDraft() {
+        settingsDraft = appliedSettings
+    }
+
+    func chooseKernelOverride() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose Linux Kernel"
+        panel.message = "Choose a vmlinux/Image file to boot BuildKit with. Leave unset to use Crucible's default kernel source."
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        settingsDraft.kernelOverridePath = url.path
+    }
+
+    func useDefaultKernel() {
+        settingsDraft.kernelOverridePath = nil
+    }
+
+    func setLaunchAtLogin(_ enabled: Bool) {
+        do {
+            try LoginItemManager.setEnabled(enabled)
+            launchAtLoginEnabled = LoginItemManager.isEnabled
+            lastError = nil
+        } catch {
+            launchAtLoginEnabled = LoginItemManager.isEnabled
+            lastError = "Failed to update launch at login: \(String(describing: error))"
+            logStore.append(source: .supervisor, level: .error, lastError ?? "")
+        }
+    }
+
+    func runPrerequisiteChecks() {
+        Task { [buildx] in
+            let docker = await buildx.locateDocker()
+            var checks: [PrerequisiteCheck] = [
+                PrerequisiteCheck(
+                    name: "Docker CLI",
+                    status: docker == nil ? .warning : .ok,
+                    detail: docker ?? "Not found. BuildKit can run, but buildx convenience actions need Docker CLI."
+                )
+            ]
+
+            do {
+                let kernel = try KernelLocator.locate(settings: self.settingsDraft)
+                checks.append(PrerequisiteCheck(
+                    name: "Linux kernel",
+                    status: .ok,
+                    detail: kernel.path
+                ))
+            } catch {
+                checks.append(PrerequisiteCheck(
+                    name: "Linux kernel",
+                    status: .warning,
+                    detail: "No local kernel yet. Crucible will download the default kernel on start."
+                ))
+            }
+
+            checks.append(PrerequisiteCheck(
+                name: "Host socket path",
+                status: self.settingsDraft.hostSocketPath.hasPrefix("/") ? .ok : .failed,
+                detail: self.settingsDraft.hostSocketPath
+            ))
+
+            await MainActor.run {
+                self.prerequisiteChecks = checks
+                self.logStore.append(source: .supervisor, level: .info, "Prerequisite check complete")
+            }
+        }
+    }
+
+    private func validationMessage(for issue: BuildKitSettingsValidator.Issue) -> String {
+        switch issue {
+        case .imageReferenceEmpty:
+            return "BuildKit image reference is required."
+        case .imageReferenceMalformed(let ref):
+            return "BuildKit image reference looks invalid: \(ref)."
+        case .socketPathEmpty:
+            return "Host socket path is required."
+        case .socketPathNotAbsolute(let path):
+            return "Host socket path must be absolute: \(path)."
+        case .cpuCountOutOfRange(let value):
+            return "CPU count must be between 1 and 64 (currently \(value))."
+        case .memoryOutOfRange(let value):
+            return "Memory must be between 512 MiB and 256 GiB (currently \(value) MiB)."
+        case .backendUnavailable(let backend):
+            switch backend {
+            case .containerization:
+                return "Selected backend is unavailable."
+            case .containerCLI:
+                return "Apple container CLI backend is not implemented yet."
+            }
+        }
     }
 
     // MARK: - Buildx integration
@@ -206,13 +378,13 @@ final class TrayViewModel: ObservableObject {
     func copyBuildKitHostEnv() {
         guard let ep = endpoint else { return }
         copyToPasteboard(BuildxCommands.buildKitHostEnv(for: ep))
-        lastInfo = "Copied BUILDKIT_HOST env"
+        logStore.append(source: .buildx, level: .info, "Copied BUILDKIT_HOST env")
     }
 
     func copyBuildxCreateCommand() {
         guard let ep = endpoint else { return }
         copyToPasteboard(BuildxCommands.dockerBuildxCreateCommand(for: ep))
-        lastInfo = "Copied docker buildx create command"
+        logStore.append(source: .buildx, level: .info, "Copied docker buildx create command")
     }
 
     func addToBuildx() {
@@ -222,13 +394,13 @@ final class TrayViewModel: ObservableObject {
             await MainActor.run {
                 switch result {
                 case .created(let name):
-                    self.lastInfo = "Added '\(name)' to docker buildx"
+                    let msg = "Added '\(name)' to docker buildx"
                     self.lastError = nil
-                    self.logStore.append(source: .buildx, level: .info, self.lastInfo ?? "")
+                    self.logStore.append(source: .buildx, level: .info, msg)
                 case .alreadyExists(let name):
-                    self.lastInfo = "'\(name)' already registered in buildx (set as default)"
+                    let msg = "'\(name)' already registered in buildx (set as default)"
                     self.lastError = nil
-                    self.logStore.append(source: .buildx, level: .info, self.lastInfo ?? "")
+                    self.logStore.append(source: .buildx, level: .info, msg)
                 case .dockerNotFound:
                     self.lastError = "docker not found. Install Docker Desktop, or copy the command and run it in a shell."
                     self.logStore.append(source: .buildx, level: .error, self.lastError ?? "")
@@ -262,13 +434,13 @@ final class TrayViewModel: ObservableObject {
             await MainActor.run {
                 switch result {
                 case .created(let name):
-                    self.lastInfo = "Recreated '\(name)' buildx builder"
+                    let msg = "Recreated '\(name)' buildx builder"
                     self.lastError = nil
-                    self.logStore.append(source: .buildx, level: .info, self.lastInfo ?? "")
+                    self.logStore.append(source: .buildx, level: .info, msg)
                 case .alreadyExists(let name):
-                    self.lastInfo = "'\(name)' already registered in buildx"
+                    let msg = "'\(name)' already registered in buildx"
                     self.lastError = nil
-                    self.logStore.append(source: .buildx, level: .info, self.lastInfo ?? "")
+                    self.logStore.append(source: .buildx, level: .info, msg)
                 case .dockerNotFound:
                     self.lastError = "docker not found. Install Docker Desktop, or copy the command and run it in a shell."
                     self.logStore.append(source: .buildx, level: .error, self.lastError ?? "")
@@ -290,13 +462,13 @@ final class TrayViewModel: ObservableObject {
             await MainActor.run {
                 switch result {
                 case .removed(let name):
-                    self.lastInfo = "Removed '\(name)' buildx builder"
+                    let msg = "Removed '\(name)' buildx builder"
                     self.lastError = nil
-                    self.logStore.append(source: .buildx, level: .info, self.lastInfo ?? "")
+                    self.logStore.append(source: .buildx, level: .info, msg)
                 case .notRegistered(let name):
-                    self.lastInfo = "'\(name)' buildx builder is not registered"
+                    let msg = "'\(name)' buildx builder is not registered"
                     self.lastError = nil
-                    self.logStore.append(source: .buildx, level: .info, self.lastInfo ?? "")
+                    self.logStore.append(source: .buildx, level: .info, msg)
                 case .dockerNotFound:
                     self.lastError = "docker not found."
                     self.logStore.append(source: .buildx, level: .error, self.lastError ?? "")
@@ -322,9 +494,9 @@ final class TrayViewModel: ObservableObject {
                 switch result {
                 case .pruned(let output):
                     let text = output.trimmingCharacters(in: .whitespacesAndNewlines)
-                    self.lastInfo = text.isEmpty ? "BuildKit cache pruned" : text
+                    let msg = text.isEmpty ? "BuildKit cache pruned" : text
                     self.lastError = nil
-                    self.logStore.append(source: .buildx, level: .info, self.lastInfo ?? "BuildKit cache pruned")
+                    self.logStore.append(source: .buildx, level: .info, msg)
                 case .dockerNotFound:
                     self.lastError = "docker not found."
                     self.logStore.append(source: .buildx, level: .error, self.lastError ?? "")

@@ -2,21 +2,19 @@ import AppKit
 import SwiftUI
 
 @MainActor
-final class LogWindowController: NSWindowController, NSWindowDelegate {
-    private let store: LogStore
+final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private let onClose: () -> Void
 
-    init(store: LogStore, onClose: @escaping () -> Void) {
-        self.store = store
+    init(viewModel: TrayViewModel, onClose: @escaping () -> Void) {
         self.onClose = onClose
-        let view = LogsWindowView(store: store)
+        let view = SettingsWindowView(viewModel: viewModel)
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 980, height: 620),
+            contentRect: NSRect(x: 0, y: 0, width: 760, height: 560),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
-        window.title = "Crucible Logs"
+        window.title = "Crucible Settings"
         window.contentView = NSHostingView(rootView: view)
         window.isReleasedWhenClosed = false
         super.init(window: window)
