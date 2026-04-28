@@ -104,6 +104,10 @@ final class TrayViewModel: ObservableObject {
 
     var daemonConfigPath: String { StorageUsage.daemonConfigURL().path }
 
+    var effectiveDaemonConfig: String { appliedSettings.effectiveDaemonConfigTOML() }
+
+    var configuredWorkerPlatforms: String { "linux/arm64, linux/amd64" }
+
     var statusText: String {
         switch state {
         case .stopped: return "Stopped"
@@ -333,7 +337,15 @@ final class TrayViewModel: ObservableObject {
         Buildx: \(buildxStatus.displayText)
         Endpoint: \(endpoint?.url ?? "none")
         Storage: \(storageUsage?.displayText ?? "not created")
+        Backend: \(appliedSettings.backend.rawValue)
+        BuildKit image: \(appliedSettings.imageReference)
+        Worker platforms: \(configuredWorkerPlatforms)
+        Rosetta: enabled automatically when available
+        Effective daemon config path: \(daemonConfigPath)
         Last error: \(lastError ?? "none")
+
+        Effective daemon config:
+        \(effectiveDaemonConfig)
 
         Recent logs:
         \(recentLogs)

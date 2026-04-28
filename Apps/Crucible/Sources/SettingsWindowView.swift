@@ -393,7 +393,43 @@ struct SettingsWindowView: View {
                 metricRow("Daemon", viewModel.statusText)
                 metricRow("Buildx", viewModel.buildxStatus.displayText)
                 metricRow("Endpoint", viewModel.endpoint?.url ?? "none")
+                metricRow("Backend", viewModel.appliedSettings.backend.rawValue)
+                metricRow("Image", viewModel.appliedSettings.imageReference)
+                metricRow("Platforms", viewModel.configuredWorkerPlatforms)
+                metricRow("Rosetta", "enabled automatically when available")
                 metricRow("Last Error", viewModel.lastError ?? "none")
+            }
+
+            card("Effective Daemon Config") {
+                Text("This is the generated config mounted into buildkitd. Crucible injects worker platforms for Rosetta unless your custom config sets `[worker.oci].platforms` explicitly.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                Text(viewModel.daemonConfigPath)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                ScrollView {
+                    Text(viewModel.effectiveDaemonConfig)
+                        .font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(10)
+                }
+                .frame(minHeight: 120, maxHeight: 220)
+                .background(Color(nsColor: .textBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
+                )
+                HStack {
+                    Button("Copy Effective Config") {
+                        copy(viewModel.effectiveDaemonConfig)
+                    }
+                    Button("Copy Config Path") {
+                        copy(viewModel.daemonConfigPath)
+                    }
+                }
             }
 
             card("Logs & Reports") {
