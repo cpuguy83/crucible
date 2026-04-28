@@ -52,6 +52,11 @@ struct SettingsValidatorTests {
         #expect(BuildKitSettingsValidator.validate(s).contains(.backendUnavailable(.containerCLI)))
     }
 
+    @Test func backendErrorsHaveUserMessages() {
+        let message = buildKitUserMessage(for: BuildKitBackendError.daemonStartFailed("mount failed"))
+        #expect(message == "Failed to start BuildKit. mount failed")
+    }
+
     @Test func emptyImageReferenceRejected() {
         var s = BuildKitSettings()
         s.imageReference = ""

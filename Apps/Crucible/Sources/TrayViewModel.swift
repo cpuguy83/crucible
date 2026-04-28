@@ -153,7 +153,7 @@ final class TrayViewModel: ObservableObject {
             lastError = nil
             logStore.append(source: .supervisor, level: .info, "BuildKit stopped")
         } catch {
-            let msg = String(describing: error)
+            let msg = buildKitUserMessage(for: error)
             lastError = msg
             logStore.append(source: .supervisor, level: .error, "shutdown failed: \(msg)")
             Self.log.error("shutdown failed: \(msg, privacy: .public)")
@@ -177,7 +177,7 @@ final class TrayViewModel: ObservableObject {
                 self.refreshStorageUsage()
                 self.logStore.append(source: .supervisor, level: .info, "Pulled \(self.appliedSettings.imageReference)")
             } catch {
-                let msg = String(describing: error)
+                let msg = buildKitUserMessage(for: error)
                 self.lastError = msg
                 self.logStore.append(source: .supervisor, level: .error, "pull image failed: \(msg)")
                 Self.log.error("pull image failed: \(msg, privacy: .public)")
@@ -303,7 +303,7 @@ final class TrayViewModel: ObservableObject {
     }
 
     private func reportResetFailure(_ operation: String, _ error: Error) {
-        let msg = String(describing: error)
+        let msg = buildKitUserMessage(for: error)
         lastError = msg
         logStore.append(source: .supervisor, level: .error, "\(operation) failed: \(msg)")
         Self.log.error("\(operation) failed: \(msg, privacy: .public)")
@@ -411,8 +411,9 @@ final class TrayViewModel: ObservableObject {
                     await self.start()
                 }
             } catch {
-                self.lastError = String(describing: error)
-                self.logStore.append(source: .supervisor, level: .error, "settings save failed: \(String(describing: error))")
+                let msg = buildKitUserMessage(for: error)
+                self.lastError = msg
+                self.logStore.append(source: .supervisor, level: .error, "settings save failed: \(msg)")
             }
         }
     }
@@ -443,7 +444,7 @@ final class TrayViewModel: ObservableObject {
             lastError = nil
         } catch {
             launchAtLoginEnabled = LoginItemManager.isEnabled
-            lastError = "Failed to update launch at login: \(String(describing: error))"
+            lastError = "Failed to update launch at login: \(buildKitUserMessage(for: error))"
             logStore.append(source: .supervisor, level: .error, lastError ?? "")
         }
     }
@@ -688,7 +689,7 @@ final class TrayViewModel: ObservableObject {
         do {
             streams = try await supervisor.streams()
         } catch {
-            self.lastError = String(describing: error)
+            self.lastError = buildKitUserMessage(for: error)
             return
         }
         subscribedToBackend = true
@@ -745,7 +746,7 @@ final class TrayViewModel: ObservableObject {
             self.lastError = nil
             self.refreshStorageUsage()
         } catch {
-            let msg = String(describing: error)
+            let msg = buildKitUserMessage(for: error)
             self.lastError = msg
             self.logStore.append(source: .supervisor, level: .error, "\(label) failed: \(msg)")
             Self.log.error("\(label, privacy: .public) failed: \(msg, privacy: .public)")

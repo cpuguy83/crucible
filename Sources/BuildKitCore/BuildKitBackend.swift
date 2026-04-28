@@ -50,6 +50,36 @@ public enum BuildKitBackendError: Error, Sendable, Equatable {
     case alreadyRunning(String)
 }
 
+extension BuildKitBackendError: LocalizedError {
+    public var errorDescription: String? { userMessage }
+
+    public var userMessage: String {
+        switch self {
+        case .notImplemented(let operation):
+            return "This backend operation is not implemented yet: \(operation)."
+        case .invalidState(let current, let attempted):
+            return "Cannot \(attempted) while BuildKit is \(current)."
+        case .imagePullFailed(let detail):
+            return "Failed to pull the BuildKit image. \(detail)"
+        case .daemonStartFailed(let detail):
+            return "Failed to start BuildKit. \(detail)"
+        case .healthCheckFailed(let detail):
+            return "BuildKit started but did not become ready. \(detail)"
+        case .configurationInvalid(let detail):
+            return "Settings are invalid. \(detail)"
+        case .alreadyRunning(let detail):
+            return "BuildKit is already running. \(detail)"
+        }
+    }
+}
+
+public func buildKitUserMessage(for error: Error) -> String {
+    if let backendError = error as? BuildKitBackendError {
+        return backendError.userMessage
+    }
+    return error.localizedDescription
+}
+
 /// Default `resetState` for backends without persistent state.
 extension BuildKitBackend {
     public func resetState() async throws { /* no-op */ }
