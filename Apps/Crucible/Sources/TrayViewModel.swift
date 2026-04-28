@@ -14,6 +14,7 @@ final class TrayViewModel: ObservableObject {
     @Published private(set) var progressMessage: String?
     @Published private(set) var logTail: [String] = []
     @Published private(set) var buildxStatus: BuildxIntegration.BuilderStatus = .unknown
+    @Published private(set) var storageUsage: StorageUsage?
 
     let logStore = LogStore()
 
@@ -36,6 +37,7 @@ final class TrayViewModel: ObservableObject {
             }
         }
 
+        refreshStorageUsage()
         Task { await self.start() }
     }
 
@@ -165,6 +167,24 @@ final class TrayViewModel: ObservableObject {
         let pb = NSPasteboard.general
         pb.clearContents()
         pb.setString(text, forType: .string)
+    }
+
+    func copyDiagnosticsSummary() {
+        let recentLogs = logStore.events.suffix(80).map(\.rawLine).joined(separator: "\n")
+        let summary = """
+        Crucible diagnostics
+        State: \(String(describing: state))
+        Buildx: \(buildxStatus.displayText)
+        Endpoint: \(endpoint?.url ?? "none")
+        Storage: \(storageUsage?.displayText ?? "not created")
+        Last error: \(lastError ?? "none")
+        Last info: \(lastInfo ?? "none")
+
+        Recent logs:
+        \(recentLogs)
+        """
+        copyToPasteboard(summary)
+        lastInfo = "Copied diagnostics summary"
     }
 
     func openLogsWindow() {
@@ -312,6 +332,7 @@ final class TrayViewModel: ObservableObject {
                     self.lastError = "docker buildx prune failed (exit \(code)):\n\(stderr)"
                     self.logStore.append(source: .buildx, level: .error, self.lastError ?? "")
                 }
+                self.refreshStorageUsage()
             }
         }
     }
@@ -405,12 +426,17 @@ final class TrayViewModel: ObservableObject {
             try await op()
             self.state = await supervisor.currentState()
             self.lastError = nil
+            self.refreshStorageUsage()
         } catch {
             let msg = String(describing: error)
             self.lastError = msg
             self.logStore.append(source: .supervisor, level: .error, "\(label) failed: \(msg)")
             Self.log.error("\(label, privacy: .public) failed: \(msg, privacy: .public)")
         }
+    }
+
+    func refreshStorageUsage() {
+        storageUsage = StorageUsage.current()
     }
 
     private static func level(for line: String) -> LogLevel? {

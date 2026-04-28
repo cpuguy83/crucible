@@ -23,7 +23,7 @@ struct LogsWindowView: View {
                 events: displayedEvents,
                 query: query,
                 enabledSources: enabledSources,
-                followTail: followTail
+                followTail: $followTail
             )
         }
         .frame(minWidth: 900, minHeight: 520)
@@ -72,6 +72,10 @@ struct LogsWindowView: View {
                 copyVisibleLogs()
             }
 
+            Button("Export…") {
+                exportVisibleLogs()
+            }
+
             Button("Clear") {
                 store.clear()
             }
@@ -98,15 +102,32 @@ struct LogsWindowView: View {
     }
 
     private func copyVisibleLogs() {
-        let text = displayedEvents
+        let text = visibleLogText()
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(text, forType: .string)
+    }
+
+    private func exportVisibleLogs() {
+        let panel = NSSavePanel()
+        panel.title = "Export Crucible Logs"
+        panel.nameFieldStringValue = "crucible-logs.txt"
+        panel.allowedContentTypes = [.plainText]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try visibleLogText().write(to: url, atomically: true, encoding: .utf8)
+        } catch {
+            NSAlert(error: error).runModal()
+        }
+    }
+
+    private func visibleLogText() -> String {
+        displayedEvents
             .filter { event in
                 enabledSources.contains(event.source)
                     && (query.isEmpty || event.rawLine.localizedCaseInsensitiveContains(query))
             }
             .map(\.rawLine)
             .joined(separator: "\n")
-        let pb = NSPasteboard.general
-        pb.clearContents()
-        pb.setString(text, forType: .string)
     }
 }

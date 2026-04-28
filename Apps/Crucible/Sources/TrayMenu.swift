@@ -18,6 +18,11 @@ struct TrayMenu: View {
             .disabled(!viewModel.canRestart)
 
         Menu("Storage") {
+            Text(viewModel.storageUsage?.displayText ?? "State image: not created")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Button("Refresh storage usage", action: viewModel.refreshStorageUsage)
+            Divider()
             Button("Prune BuildKit cache…", action: viewModel.pruneBuildKitCache)
                 .disabled(!viewModel.isRunning)
             Button("Reset BuildKit state…", action: viewModel.resetState)
@@ -27,6 +32,7 @@ struct TrayMenu: View {
         Divider()
 
         Button("Open Logs…", action: viewModel.openLogsWindow)
+        Button("Copy diagnostics summary", action: viewModel.copyDiagnosticsSummary)
 
         if let ep = viewModel.endpoint {
             Divider()

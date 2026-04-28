@@ -1,11 +1,11 @@
-import AppKit
+@preconcurrency import AppKit
 import SwiftUI
 
 struct LogTextView: NSViewRepresentable {
     var events: [LogEvent]
     var query: String
     var enabledSources: Set<LogSource>
-    var followTail: Bool
+    @Binding var followTail: Bool
 
     func makeNSView(context: Context) -> NSScrollView {
         let scroll = NSScrollView()
@@ -13,6 +13,7 @@ struct LogTextView: NSViewRepresentable {
         scroll.hasHorizontalScroller = true
         scroll.autohidesScrollers = false
         scroll.borderType = .noBorder
+        scroll.contentView.postsBoundsChangedNotifications = true
 
         let textView = NSTextView()
         textView.isEditable = false
@@ -28,6 +29,8 @@ struct LogTextView: NSViewRepresentable {
 
         scroll.documentView = textView
         context.coordinator.textView = textView
+        context.coordinator.followTail = $followTail
+        context.coordinator.observe(scrollView: scroll)
         context.coordinator.render(
             events: events,
             query: query,
@@ -38,6 +41,7 @@ struct LogTextView: NSViewRepresentable {
     }
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
+        context.coordinator.followTail = $followTail
         context.coordinator.render(
             events: events,
             query: query,
@@ -51,7 +55,30 @@ struct LogTextView: NSViewRepresentable {
     @MainActor
     final class Coordinator {
         weak var textView: NSTextView?
+        var followTail: Binding<Bool>?
         private var lastRenderedSignature = ""
+        private var scrollObserver: NSObjectProtocol?
+        private var programmaticScroll = false
+
+        deinit {
+            if let scrollObserver {
+                NotificationCenter.default.removeObserver(scrollObserver)
+            }
+        }
+
+        func observe(scrollView: NSScrollView) {
+            guard scrollObserver == nil else { return }
+            scrollObserver = NotificationCenter.default.addObserver(
+                forName: NSView.boundsDidChangeNotification,
+                object: scrollView.contentView,
+                queue: .main
+            ) { [weak self, weak scrollView] _ in
+                Task { @MainActor in
+                    guard let self, let scrollView else { return }
+                    self.handleScroll(scrollView)
+                }
+            }
+        }
 
         func render(
             events: [LogEvent],
@@ -81,7 +108,21 @@ struct LogTextView: NSViewRepresentable {
             }
             textView.textStorage?.setAttributedString(text)
             if followTail {
+                programmaticScroll = true
                 textView.scrollToEndOfDocument(nil)
+                programmaticScroll = false
+            }
+        }
+
+        private func handleScroll(_ scrollView: NSScrollView) {
+            guard !programmaticScroll, followTail?.wrappedValue == true else { return }
+            let visible = scrollView.contentView.bounds
+            let docHeight = scrollView.documentView?.bounds.height ?? 0
+            // If the user is more than roughly two text lines away from the
+            // bottom, stop auto-following. They can re-enable via the toggle.
+            let distanceFromBottom = docHeight - visible.maxY
+            if distanceFromBottom > 32 {
+                followTail?.wrappedValue = false
             }
         }
 
