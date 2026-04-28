@@ -14,11 +14,14 @@ final class TrayViewModel: ObservableObject {
     @Published private(set) var progressMessage: String?
     @Published private(set) var logTail: [String] = []
 
+    let logStore = LogStore()
+
     private static let log = Logger(subsystem: "com.cpuguy83.Crucible", category: "tray")
 
     private let supervisor: BuildKitSupervisor
     private let buildx = BuildxIntegration()
     private var subscriberTask: Task<Void, Never>?
+    private var logWindowController: LogWindowController?
 
     init() {
         let settings = BuildKitSettings()
@@ -136,10 +139,17 @@ final class TrayViewModel: ObservableObject {
     }
 
     func copyLogsToPasteboard() {
-        let text = logTail.joined(separator: "\n")
+        let text = logStore.events.map(\.rawLine).joined(separator: "\n")
         let pb = NSPasteboard.general
         pb.clearContents()
         pb.setString(text, forType: .string)
+    }
+
+    func openLogsWindow() {
+        if logWindowController == nil {
+            logWindowController = LogWindowController(store: logStore)
+        }
+        logWindowController?.show()
     }
 
     // MARK: - Buildx integration
@@ -172,13 +182,17 @@ final class TrayViewModel: ObservableObject {
                 case .created(let name):
                     self.lastInfo = "Added '\(name)' to docker buildx"
                     self.lastError = nil
+                    self.logStore.append(source: .buildx, level: .info, self.lastInfo ?? "")
                 case .alreadyExists(let name):
                     self.lastInfo = "'\(name)' already registered in buildx (set as default)"
                     self.lastError = nil
+                    self.logStore.append(source: .buildx, level: .info, self.lastInfo ?? "")
                 case .dockerNotFound:
                     self.lastError = "docker not found. Install Docker Desktop, or copy the command and run it in a shell."
+                    self.logStore.append(source: .buildx, level: .error, self.lastError ?? "")
                 case .failed(let stderr, let code):
                     self.lastError = "docker buildx create failed (exit \(code)):\n\(stderr)"
+                    self.logStore.append(source: .buildx, level: .error, self.lastError ?? "")
                 }
                 Self.log.notice("addToBuildx -> \(String(describing: result), privacy: .public)")
             }
@@ -224,6 +238,7 @@ final class TrayViewModel: ObservableObject {
         for await s in stream {
             await MainActor.run {
                 self.state = s
+                self.logStore.append(source: .state, String(describing: s))
                 Self.log.notice("state: \(String(describing: s), privacy: .public)")
             }
         }
@@ -233,6 +248,7 @@ final class TrayViewModel: ObservableObject {
         for await p in stream {
             await MainActor.run {
                 self.progressMessage = p.message
+                self.logStore.append(source: .progress, p.message)
                 Self.log.notice("progress[\(p.phase.rawValue, privacy: .public)]: \(p.message, privacy: .public)")
             }
         }
@@ -245,6 +261,7 @@ final class TrayViewModel: ObservableObject {
                 if self.logTail.count > 500 {
                     self.logTail.removeFirst(self.logTail.count - 500)
                 }
+                self.logStore.append(source: .buildkitd, level: Self.level(for: line), line)
                 Self.log.notice("\(line, privacy: .public)")
             }
         }
@@ -258,7 +275,20 @@ final class TrayViewModel: ObservableObject {
         } catch {
             let msg = String(describing: error)
             self.lastError = msg
+            self.logStore.append(source: .supervisor, level: .error, "\(label) failed: \(msg)")
             Self.log.error("\(label, privacy: .public) failed: \(msg, privacy: .public)")
         }
+    }
+
+    private static func level(for line: String) -> LogLevel? {
+        if line.contains("level=error") || line.localizedCaseInsensitiveContains("panic") || line.localizedCaseInsensitiveContains("fatal") {
+            return .error
+        }
+        if line.contains("level=warning") || line.localizedCaseInsensitiveContains("warning") {
+            return .warning
+        }
+        if line.contains("level=debug") { return .debug }
+        if line.contains("level=info") { return .info }
+        return nil
     }
 }

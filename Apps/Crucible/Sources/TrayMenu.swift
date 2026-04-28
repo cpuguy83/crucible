@@ -19,6 +19,10 @@ struct TrayMenu: View {
         Button("Reset BuildKit state…", action: viewModel.resetState)
             .disabled(!viewModel.canResetState)
 
+        Divider()
+
+        Button("Open Logs…", action: viewModel.openLogsWindow)
+
         if let ep = viewModel.endpoint {
             Divider()
             Button("Copy socket path") {

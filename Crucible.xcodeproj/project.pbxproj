@@ -7,19 +7,29 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		35C741CF99B10A88355A0027 /* LogStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15504BF7A2219A6E8EC8FE2C /* LogStore.swift */; };
 		55D1711B0F8678525B4ADEAC /* TrayViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8C79C6A411727E56CBF7DD3 /* TrayViewModel.swift */; };
 		8512D2BA431B0DD1C2DA60AC /* TrayMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBE7C0C64B38C3B627C04C57 /* TrayMenu.swift */; };
 		904D508FBC1EBCE08E494D51 /* BuildKitContainerization in Frameworks */ = {isa = PBXBuildFile; productRef = E4E1BBA347F1430883294763 /* BuildKitContainerization */; };
 		B0EF64E776A20E605E1561A8 /* BuildKitContainerCLI in Frameworks */ = {isa = PBXBuildFile; productRef = 87561BA819EF25A6D2C134B5 /* BuildKitContainerCLI */; };
+		B53C03DA415F9FAB56D43FF1 /* LogsWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65D7C4C8935AF60EE2E721AF /* LogsWindowView.swift */; };
 		B72D822815016EF0CF1539D8 /* CrucibleApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4958C4DA970F90DE612B90EC /* CrucibleApp.swift */; };
 		BE0991C4C1B15E5BBF99AE87 /* BuildKitCore in Frameworks */ = {isa = PBXBuildFile; productRef = 94D4BDFAB03909E67DC4C9D6 /* BuildKitCore */; };
 		C48B270EB6E6AE82AFD0B2CC /* BuildxIntegration.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8CA7A2A6FFE8BEB2E21E8DD /* BuildxIntegration.swift */; };
+		D574EEB5965493DFA8C68DC6 /* LogTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92CFDF081682E78F12D263DB /* LogTextView.swift */; };
+		D9DF213E8FCAB9E19150ECDC /* LogEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = D61BAAB7D7CFE010A233B518 /* LogEvent.swift */; };
+		F5F2067B68EC381B8D515086 /* LogWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8BF14F272CC999F8BF0E626 /* LogWindowController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		15504BF7A2219A6E8EC8FE2C /* LogStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogStore.swift; sourceTree = "<group>"; };
 		4958C4DA970F90DE612B90EC /* CrucibleApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrucibleApp.swift; sourceTree = "<group>"; };
+		65D7C4C8935AF60EE2E721AF /* LogsWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogsWindowView.swift; sourceTree = "<group>"; };
 		784B055122285A953F5AE66D /* Crucible.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Crucible.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		92CFDF081682E78F12D263DB /* LogTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogTextView.swift; sourceTree = "<group>"; };
 		B74951F61660E212A4369A99 /* apple-buildkit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "apple-buildkit"; path = .; sourceTree = SOURCE_ROOT; };
+		C8BF14F272CC999F8BF0E626 /* LogWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogWindowController.swift; sourceTree = "<group>"; };
+		D61BAAB7D7CFE010A233B518 /* LogEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogEvent.swift; sourceTree = "<group>"; };
 		D8CA7A2A6FFE8BEB2E21E8DD /* BuildxIntegration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildxIntegration.swift; sourceTree = "<group>"; };
 		F8C79C6A411727E56CBF7DD3 /* TrayViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrayViewModel.swift; sourceTree = "<group>"; };
 		FBE7C0C64B38C3B627C04C57 /* TrayMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrayMenu.swift; sourceTree = "<group>"; };
@@ -61,6 +71,11 @@
 			children = (
 				D8CA7A2A6FFE8BEB2E21E8DD /* BuildxIntegration.swift */,
 				4958C4DA970F90DE612B90EC /* CrucibleApp.swift */,
+				D61BAAB7D7CFE010A233B518 /* LogEvent.swift */,
+				15504BF7A2219A6E8EC8FE2C /* LogStore.swift */,
+				65D7C4C8935AF60EE2E721AF /* LogsWindowView.swift */,
+				92CFDF081682E78F12D263DB /* LogTextView.swift */,
+				C8BF14F272CC999F8BF0E626 /* LogWindowController.swift */,
 				FBE7C0C64B38C3B627C04C57 /* TrayMenu.swift */,
 				F8C79C6A411727E56CBF7DD3 /* TrayViewModel.swift */,
 			);
@@ -159,6 +174,11 @@
 			files = (
 				C48B270EB6E6AE82AFD0B2CC /* BuildxIntegration.swift in Sources */,
 				B72D822815016EF0CF1539D8 /* CrucibleApp.swift in Sources */,
+				D9DF213E8FCAB9E19150ECDC /* LogEvent.swift in Sources */,
+				35C741CF99B10A88355A0027 /* LogStore.swift in Sources */,
+				D574EEB5965493DFA8C68DC6 /* LogTextView.swift in Sources */,
+				F5F2067B68EC381B8D515086 /* LogWindowController.swift in Sources */,
+				B53C03DA415F9FAB56D43FF1 /* LogsWindowView.swift in Sources */,
 				8512D2BA431B0DD1C2DA60AC /* TrayMenu.swift in Sources */,
 				55D1711B0F8678525B4ADEAC /* TrayViewModel.swift in Sources */,
 			);
