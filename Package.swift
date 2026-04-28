@@ -52,6 +52,11 @@ let package = Package(
             dependencies: ["BuildKitContainerization"],
             path: "Tests/BuildKitContainerizationTests"
         ),
+        .testTarget(
+            name: "BuildKitContainerCLITests",
+            dependencies: ["BuildKitContainerCLI"],
+            path: "Tests/BuildKitContainerCLITests"
+        ),
 
         // Headless smoke driver. Sign with the virtualization entitlement
         // before running:

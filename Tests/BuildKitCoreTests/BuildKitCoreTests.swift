@@ -78,10 +78,10 @@ struct SettingsValidatorTests {
         #expect(autoStart == false)
     }
 
-    @Test func containerCLIBackendRejectedUntilImplemented() {
+    @Test func containerCLIBackendAccepted() {
         var s = BuildKitSettings()
         s.backend = .containerCLI
-        #expect(BuildKitSettingsValidator.validate(s).contains(.backendUnavailable(.containerCLI)))
+        #expect(BuildKitSettingsValidator.validate(s).isEmpty)
     }
 
     @Test func backendErrorsHaveUserMessages() {

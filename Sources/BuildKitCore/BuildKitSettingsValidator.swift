@@ -38,10 +38,6 @@ public enum BuildKitSettingsValidator {
             issues.append(.memoryOutOfRange(s.memoryMiB))
         }
 
-        if s.backend == .containerCLI {
-            issues.append(.backendUnavailable(.containerCLI))
-        }
-
         let configBytes = s.daemonConfigTOML.utf8.count
         if configBytes > 256 * 1024 {
             issues.append(.daemonConfigTooLarge(configBytes))
