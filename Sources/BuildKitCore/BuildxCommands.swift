@@ -9,6 +9,14 @@ public enum BuildxCommands {
     /// Default builder name used when registering Crucible with buildx.
     public static let defaultBuilderName = "crucible"
 
+    /// Keep builder names shell-safe because `dockerBuildxCreateCommand` is
+    /// intended for copy/paste into a shell.
+    public static func isValidBuilderName(_ name: String) -> Bool {
+        guard !name.isEmpty else { return false }
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_."))
+        return name.unicodeScalars.allSatisfy { allowed.contains($0) }
+    }
+
     /// `unix://` URL form of the endpoint, with the path percent-encoded
     /// so spaces and other URL-reserved characters survive shell quoting
     /// and most CLI parsers.

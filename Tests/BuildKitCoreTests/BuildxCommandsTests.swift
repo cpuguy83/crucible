@@ -33,6 +33,14 @@ struct BuildxCommandsTests {
         #expect(!cmd.contains("buildx use"))
     }
 
+    @Test func validatesShellSafeBuilderNames() {
+        #expect(BuildxCommands.isValidBuilderName("crucible"))
+        #expect(BuildxCommands.isValidBuilderName("crucible.desktop_1"))
+        #expect(!BuildxCommands.isValidBuilderName(""))
+        #expect(!BuildxCommands.isValidBuilderName("crucible desktop"))
+        #expect(!BuildxCommands.isValidBuilderName("crucible;rm"))
+    }
+
     @Test func argumentsKeepRawPathAndExposeBuilderName() {
         let args = BuildxCommands.dockerBuildxCreateArguments(
             for: endpoint, builderName: "test-builder"

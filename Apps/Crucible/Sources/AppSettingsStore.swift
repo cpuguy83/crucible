@@ -6,16 +6,26 @@ enum AppSettingsStore {
         StorageUsage.appSupportDirectory().appendingPathComponent("settings.json")
     }
 
-    static func load() -> BuildKitSettings {
+    static func load() -> AppSettings {
         let url = settingsURL
-        guard let data = try? Data(contentsOf: url),
-               let settings = try? JSONDecoder().decode(BuildKitSettings.self, from: data)
-        else { return BuildKitSettings() }
-        try? save(settings)
-        return settings
+        guard let data = try? Data(contentsOf: url) else { return AppSettings() }
+
+        let decoder = JSONDecoder()
+        if let settings = try? decoder.decode(AppSettings.self, from: data) {
+            try? save(settings)
+            return settings
+        }
+
+        if let legacy = try? decoder.decode(BuildKitSettings.self, from: data) {
+            let migrated = AppSettings.migrating(legacy)
+            try? save(migrated)
+            return migrated
+        }
+
+        return AppSettings()
     }
 
-    static func save(_ settings: BuildKitSettings) throws {
+    static func save(_ settings: AppSettings) throws {
         let url = settingsURL
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(),

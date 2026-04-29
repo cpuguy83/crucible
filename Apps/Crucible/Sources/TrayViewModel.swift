@@ -36,9 +36,12 @@ final class TrayViewModel: ObservableObject {
     private var buildLogWindowController: LogWindowController?
     private var buildLogTask: Task<Void, Never>?
     private var settingsWindowController: SettingsWindowController?
+    private var appSettings: AppSettings
 
     init() {
-        let settings = AppSettingsStore.load()
+        let appSettings = AppSettingsStore.load()
+        let settings = appSettings.selectedManagedSettings
+        self.appSettings = appSettings
         self.appliedSettings = settings
         self.settingsDraft = settings
         self.launchAtLoginEnabled = LoginItemManager.isEnabled
@@ -114,6 +117,25 @@ final class TrayViewModel: ObservableObject {
     var effectiveDaemonConfig: String { appliedSettings.effectiveDaemonConfigTOML() }
 
     var configuredWorkerPlatforms: String { "linux/arm64, linux/amd64" }
+
+    var selectedBuilderName: String { appSettings.selectedBuilder.name }
+
+    var selectedBuilderKindText: String { Self.builderKindText(for: appSettings.selectedBuilder.kind) }
+
+    var buildxBuilderName: String { appSettings.buildxName }
+
+    private var buildxBuilderNameForCommands: String { appSettings.buildxName }
+
+    var builderSummaries: [BuilderSummary] {
+        appSettings.builders.map { builder in
+            BuilderSummary(
+                id: builder.id,
+                name: builder.name,
+                kindText: Self.builderKindText(for: builder.kind),
+                isSelected: builder.id == appSettings.selectedBuilderID
+            )
+        }
+    }
 
     var activeBuildsStatusText: String { activeBuildsStatus.displayText }
 
@@ -254,11 +276,13 @@ final class TrayViewModel: ObservableObject {
 
         Task {
             do {
-                let defaults = BuildKitSettings()
+                let defaultAppSettings = AppSettings()
+                let defaults = defaultAppSettings.selectedManagedSettings
                 let shouldRestart = self.isRunning
                 try await self.supervisor.updateSettings(defaults)
                 try AppSettingsStore.delete()
                 try? LoginItemManager.setEnabled(false)
+                self.appSettings = defaultAppSettings
                 self.appliedSettings = defaults
                 self.settingsDraft = defaults
                 self.launchAtLoginEnabled = LoginItemManager.isEnabled
@@ -294,9 +318,11 @@ final class TrayViewModel: ObservableObject {
             do {
                 try await self.supervisor.stop()
                 let settings = self.appliedSettings
-                try AppSettingsStore.save(settings)
+                let appSettings = self.appSettings.replacingSelectedManagedSettings(settings)
+                self.appSettings = appSettings
+                try AppSettingsStore.save(appSettings)
                 try self.removeAppSupportDataPreservingSettings()
-                try AppSettingsStore.save(settings)
+                try AppSettingsStore.save(appSettings)
                 try await self.supervisor.updateSettings(settings)
                 self.finishReset(settings: settings, message: "Local state reset")
             } catch {
@@ -322,8 +348,10 @@ final class TrayViewModel: ObservableObject {
                     try FileManager.default.removeItem(at: root)
                 }
 
-                let defaults = BuildKitSettings()
+                let defaultAppSettings = AppSettings()
+                let defaults = defaultAppSettings.selectedManagedSettings
                 try await self.supervisor.updateSettings(defaults)
+                self.appSettings = defaultAppSettings
                 self.launchAtLoginEnabled = LoginItemManager.isEnabled
                 self.finishReset(settings: defaults, message: "Factory reset complete")
             } catch {
@@ -614,7 +642,9 @@ final class TrayViewModel: ObservableObject {
             do {
                 let shouldRestart = self.isRunning
                 try await self.supervisor.updateSettings(newSettings)
-                try AppSettingsStore.save(newSettings)
+                let appSettings = self.appSettings.replacingSelectedManagedSettings(newSettings)
+                try AppSettingsStore.save(appSettings)
+                self.appSettings = appSettings
                 self.appliedSettings = newSettings
                 self.subscribedToBackend = false
                 self.subscriberTask?.cancel()
@@ -840,14 +870,15 @@ final class TrayViewModel: ObservableObject {
 
     func copyBuildxCreateCommand() {
         guard let ep = endpoint else { return }
-        copyToPasteboard(BuildxCommands.dockerBuildxCreateCommand(for: ep))
+        copyToPasteboard(BuildxCommands.dockerBuildxCreateCommand(for: ep, builderName: buildxBuilderNameForCommands))
         logStore.append(source: .buildx, level: .info, "Copied docker buildx create command")
     }
 
     func addToBuildx() {
         guard let ep = endpoint else { return }
+        let builderName = buildxBuilderNameForCommands
         Task { [buildx] in
-            let result = await buildx.install(endpoint: ep)
+            let result = await buildx.install(endpoint: ep, builderName: builderName)
             await MainActor.run {
                 switch result {
                 case .created(let name):
@@ -875,8 +906,9 @@ final class TrayViewModel: ObservableObject {
     }
 
     func refreshBuildxStatus() {
+        let builderName = buildxBuilderNameForCommands
         Task { [buildx] in
-            let status = await buildx.status()
+            let status = await buildx.status(builderName: builderName)
             await MainActor.run {
                 self.buildxStatus = status
                 self.logStore.append(source: .buildx, level: .info, "buildx status: \(status.displayText)")
@@ -886,8 +918,9 @@ final class TrayViewModel: ObservableObject {
 
     func recreateBuildxBuilder() {
         guard let ep = endpoint else { return }
+        let builderName = buildxBuilderNameForCommands
         Task { [buildx] in
-            let result = await buildx.recreate(endpoint: ep)
+            let result = await buildx.recreate(endpoint: ep, builderName: builderName)
             await MainActor.run {
                 switch result {
                 case .created(let name):
@@ -914,8 +947,9 @@ final class TrayViewModel: ObservableObject {
     }
 
     func removeBuildxBuilder() {
+        let builderName = buildxBuilderNameForCommands
         Task { [buildx] in
-            let result = await buildx.remove()
+            let result = await buildx.remove(builderName: builderName)
             await MainActor.run {
                 switch result {
                 case .removed(let name):
@@ -945,8 +979,9 @@ final class TrayViewModel: ObservableObject {
             confirmTitle: "Prune Cache"
         ) else { return }
 
+        let builderName = buildxBuilderNameForCommands
         Task { [buildx] in
-            let result = await buildx.prune()
+            let result = await buildx.prune(builderName: builderName)
             await MainActor.run {
                 switch result {
                 case .pruned(let output):
@@ -1096,6 +1131,15 @@ final class TrayViewModel: ObservableObject {
         }
     }
 
+    private static func builderKindText(for kind: BuilderKind) -> String {
+        switch kind {
+        case .managedBuildKit:
+            return "Managed BuildKit"
+        case .managedDocker:
+            return "Managed Docker daemon"
+        }
+    }
+
     private static func level(for line: String) -> LogLevel? {
         if line.contains("level=error") || line.localizedCaseInsensitiveContains("panic") || line.localizedCaseInsensitiveContains("fatal") {
             return .error
@@ -1131,4 +1175,11 @@ final class TrayViewModel: ObservableObject {
     private static func shortRef(_ value: String) -> String {
         String(safeFilename(value).prefix(12))
     }
+}
+
+struct BuilderSummary: Identifiable, Equatable {
+    var id: String
+    var name: String
+    var kindText: String
+    var isSelected: Bool
 }

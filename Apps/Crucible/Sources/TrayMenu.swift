@@ -6,6 +6,9 @@ struct TrayMenu: View {
     @ObservedObject var viewModel: TrayViewModel
 
     var body: some View {
+        Text("Builder: \(viewModel.selectedBuilderName)")
+        Text(viewModel.selectedBuilderKindText)
+            .foregroundStyle(.secondary)
         Text(viewModel.statusText)
         Text(viewModel.activeBuildsMenuText)
             .foregroundStyle(.secondary)

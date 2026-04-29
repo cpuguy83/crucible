@@ -77,6 +77,8 @@ struct SettingsWindowView: View {
             VStack(alignment: .leading, spacing: 18) {
                 header
                 switch selection {
+                case .builders:
+                    buildersView
                 case .general:
                     generalView
                 case .buildx:
@@ -108,6 +110,7 @@ struct SettingsWindowView: View {
     private var generalView: some View {
         VStack(alignment: .leading, spacing: 16) {
             card("Daemon") {
+                metricRow("Builder", viewModel.selectedBuilderName)
                 metricRow("Status", viewModel.statusText)
                 metricRow("Endpoint", viewModel.endpoint?.url ?? "Not available")
                 HStack {
@@ -126,6 +129,43 @@ struct SettingsWindowView: View {
             hostAccessSettingsCard
             resourceSettingsCard
             kernelSettingsCard
+        }
+    }
+
+    private var buildersView: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            card("Selected Builder") {
+                metricRow("Saved Name", viewModel.selectedBuilderName)
+                metricRow("Type", viewModel.selectedBuilderKindText)
+                metricRow("Buildx Name", viewModel.buildxBuilderName)
+                Text("Saved builder names distinguish configured endpoints. Docker buildx integration continues to use the single active Crucible builder name `\(viewModel.buildxBuilderName)`.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+
+            card("Builders") {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(viewModel.builderSummaries) { builder in
+                        HStack(alignment: .center, spacing: 10) {
+                            Image(systemName: builder.isSelected ? "checkmark.circle.fill" : "circle")
+                                .foregroundStyle(builder.isSelected ? Color.accentColor : .secondary)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(builder.name)
+                                    .font(.callout.weight(.medium))
+                                Text(builder.kindText)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if builder.isSelected {
+                                Text("Selected")
+                                    .font(.caption.weight(.medium))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -1001,6 +1041,7 @@ struct SettingsWindowView: View {
 }
 
 private enum SettingsSection: String, CaseIterable, Identifiable {
+    case builders
     case general
     case buildx
     case builds
@@ -1012,6 +1053,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
+        case .builders: "Builders"
         case .general: "General"
         case .buildx: "Buildx"
         case .builds: "Builds"
@@ -1023,6 +1065,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
 
     var subtitle: String {
         switch self {
+        case .builders: "Select which builder Crucible controls."
         case .general: "Control the BuildKit daemon and copy its endpoint."
         case .buildx: "Manage docker buildx integration."
         case .builds: "Watch active BuildKit solves."
@@ -1034,6 +1077,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
 
     var symbol: String {
         switch self {
+        case .builders: "rectangle.stack"
         case .general: "switch.2"
         case .buildx: "hammer"
         case .builds: "list.bullet.rectangle"
