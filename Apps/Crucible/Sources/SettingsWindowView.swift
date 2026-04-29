@@ -392,7 +392,7 @@ struct SettingsWindowView: View {
             card("Current State") {
                 metricRow("Daemon", viewModel.statusText)
                 metricRow("Buildx", viewModel.buildxStatus.displayText)
-                metricRow("Active Builds", viewModel.activeBuildsStatus)
+                metricRow("Active Builds", viewModel.activeBuildsStatusText)
                 metricRow("Endpoint", viewModel.endpoint?.url ?? "none")
                 metricRow("Backend", viewModel.appliedSettings.backend.rawValue)
                 metricRow("Image", viewModel.appliedSettings.imageReference)
@@ -405,7 +405,7 @@ struct SettingsWindowView: View {
                 HStack {
                     Button("Refresh Active Builds", action: viewModel.refreshActiveBuilds)
                         .disabled(viewModel.endpoint == nil)
-                    Text(viewModel.activeBuildsStatus)
+                    Text(viewModel.activeBuildsStatusText)
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }

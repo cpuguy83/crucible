@@ -19,7 +19,7 @@ final class TrayViewModel: ObservableObject {
     @Published var settingsDraft: BuildKitSettings
     @Published private(set) var prerequisiteChecks: [PrerequisiteCheck] = []
     @Published private(set) var activeBuilds: [ActiveBuild] = []
-    @Published private(set) var activeBuildsStatus: String = "Not checked"
+    @Published private(set) var activeBuildsStatus: ActiveBuildStatus = .notChecked
 
     let logStore = LogStore()
 
@@ -28,6 +28,7 @@ final class TrayViewModel: ObservableObject {
     private let supervisor: BuildKitSupervisor
     private let buildx = BuildxIntegration()
     private var subscriberTask: Task<Void, Never>?
+    private var activeBuildRefreshTask: Task<Void, Never>?
     private var subscribedToBackend = false
     private var logWindowController: LogWindowController?
     private var settingsWindowController: SettingsWindowController?
@@ -109,6 +110,21 @@ final class TrayViewModel: ObservableObject {
     var effectiveDaemonConfig: String { appliedSettings.effectiveDaemonConfigTOML() }
 
     var configuredWorkerPlatforms: String { "linux/arm64, linux/amd64" }
+
+    var activeBuildsStatusText: String { activeBuildsStatus.displayText }
+
+    var activeBuildsMenuText: String {
+        switch activeBuildsStatus {
+        case .ready(let count):
+            return count == 0 ? "Active Builds: none" : "Active Builds: \(count)"
+        case .checking:
+            return "Active Builds: checking..."
+        case .unavailable:
+            return "Active Builds: unavailable"
+        case .notChecked, .stopped:
+            return "Active Builds: -"
+        }
+    }
 
     var statusText: String {
         switch state {
@@ -225,7 +241,11 @@ final class TrayViewModel: ObservableObject {
                 self.launchAtLoginEnabled = LoginItemManager.isEnabled
                 self.subscribedToBackend = false
                 self.subscriberTask?.cancel()
+                self.activeBuildRefreshTask?.cancel()
+                self.activeBuildRefreshTask = nil
                 self.subscriberTask = nil
+                self.activeBuilds = []
+                self.activeBuildsStatus = .notChecked
                 self.state = await supervisor.currentState()
                 self.lastError = nil
                 self.logStore.append(source: .supervisor, level: .info, "Configuration reset to defaults")
@@ -301,7 +321,11 @@ final class TrayViewModel: ObservableObject {
         settingsDraft = settings
         subscribedToBackend = false
         subscriberTask?.cancel()
+        activeBuildRefreshTask?.cancel()
+        activeBuildRefreshTask = nil
         subscriberTask = nil
+        activeBuilds = []
+        activeBuildsStatus = .notChecked
         Task {
             self.state = await supervisor.currentState()
             self.lastError = nil
@@ -339,7 +363,7 @@ final class TrayViewModel: ObservableObject {
         Buildx: \(buildxStatus.displayText)
         Endpoint: \(endpoint?.url ?? "none")
         Storage: \(storageUsage?.displayText ?? "not created")
-        Active builds: \(activeBuildsStatus)
+        Active builds: \(activeBuildsStatusText)
         Backend: \(appliedSettings.backend.rawValue)
         BuildKit image: \(appliedSettings.imageReference)
         Worker platforms: \(configuredWorkerPlatforms)
@@ -419,7 +443,11 @@ final class TrayViewModel: ObservableObject {
                 self.appliedSettings = newSettings
                 self.subscribedToBackend = false
                 self.subscriberTask?.cancel()
+                self.activeBuildRefreshTask?.cancel()
+                self.activeBuildRefreshTask = nil
                 self.subscriberTask = nil
+                self.activeBuilds = []
+                self.activeBuildsStatus = .notChecked
                 self.state = await supervisor.currentState()
                 let notice = shouldRestart ? "Applied settings; restarting BuildKit" : "Applied settings"
                 self.lastError = nil
@@ -515,25 +543,33 @@ final class TrayViewModel: ObservableObject {
     func refreshActiveBuilds() {
         guard let endpoint else {
             activeBuilds = []
-            activeBuildsStatus = "BuildKit is not running"
+            activeBuildsStatus = .stopped
             return
         }
 
-        activeBuildsStatus = "Checking…"
+        refreshActiveBuilds(endpoint: endpoint, logResult: true)
+    }
+
+    private func refreshActiveBuilds(endpoint: BuildKitEndpoint, logResult: Bool) {
+        activeBuildsStatus = .checking
         Task {
             do {
                 let builds = try await BuildHistoryClient(socketPath: endpoint.socketPath).activeBuilds()
                 await MainActor.run {
                     self.activeBuilds = builds
-                    self.activeBuildsStatus = builds.isEmpty ? "No active builds" : "\(builds.count) active"
-                    self.logStore.append(source: .supervisor, level: .info, "active builds: \(self.activeBuildsStatus)")
+                    self.activeBuildsStatus = .ready(builds.count)
+                    if logResult {
+                        self.logStore.append(source: .supervisor, level: .info, "active builds: \(self.activeBuildsStatusText)")
+                    }
                 }
             } catch {
                 let msg = buildKitUserMessage(for: error)
                 await MainActor.run {
                     self.activeBuilds = []
-                    self.activeBuildsStatus = "Unavailable: \(msg)"
-                    self.logStore.append(source: .supervisor, level: .warning, "active builds unavailable: \(msg)")
+                    self.activeBuildsStatus = .unavailable(msg)
+                    if logResult {
+                        self.logStore.append(source: .supervisor, level: .warning, "active builds unavailable: \(msg)")
+                    }
                 }
             }
         }
@@ -765,6 +801,8 @@ final class TrayViewModel: ObservableObject {
             }
             await MainActor.run {
                 self?.subscribedToBackend = false
+                self?.activeBuildRefreshTask?.cancel()
+                self?.activeBuildRefreshTask = nil
             }
         }
     }
@@ -773,8 +811,32 @@ final class TrayViewModel: ObservableObject {
         for await s in stream {
             await MainActor.run {
                 self.state = s
+                self.updateActiveBuildRefresh(for: s)
                 self.logStore.append(source: .state, String(describing: s))
                 Self.log.notice("state: \(String(describing: s), privacy: .public)")
+            }
+        }
+    }
+
+    private func updateActiveBuildRefresh(for state: BuildKitState) {
+        guard let endpoint = Self.endpoint(from: state) else {
+            activeBuildRefreshTask?.cancel()
+            activeBuildRefreshTask = nil
+            activeBuilds = []
+            activeBuildsStatus = .stopped
+            return
+        }
+
+        if activeBuildRefreshTask != nil { return }
+        refreshActiveBuilds(endpoint: endpoint, logResult: false)
+        activeBuildRefreshTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(5))
+                if Task.isCancelled { break }
+                await MainActor.run {
+                    guard let self, let endpoint = self.endpoint else { return }
+                    self.refreshActiveBuilds(endpoint: endpoint, logResult: false)
+                }
             }
         }
     }
@@ -818,6 +880,17 @@ final class TrayViewModel: ObservableObject {
 
     func refreshStorageUsage() {
         storageUsage = StorageUsage.current()
+    }
+
+    private static func endpoint(from state: BuildKitState) -> BuildKitEndpoint? {
+        switch state {
+        case .running(let endpoint):
+            return endpoint
+        case .degraded(_, let endpoint):
+            return endpoint
+        case .stopped, .starting, .stopping, .error:
+            return nil
+        }
     }
 
     private static func level(for line: String) -> LogLevel? {

@@ -131,6 +131,15 @@ struct SettingsValidatorTests {
         #expect(build.warnings == 1)
     }
 
+    @Test func activeBuildStatusDisplayText() {
+        #expect(ActiveBuildStatus.notChecked.displayText == "Not checked")
+        #expect(ActiveBuildStatus.checking.displayText == "Checking...")
+        #expect(ActiveBuildStatus.stopped.displayText == "BuildKit is not running")
+        #expect(ActiveBuildStatus.ready(0).displayText == "No active builds")
+        #expect(ActiveBuildStatus.ready(2).displayText == "2 active")
+        #expect(ActiveBuildStatus.unavailable("socket closed").displayText == "Unavailable: socket closed")
+    }
+
     @Test func emptyImageReferenceRejected() {
         var s = BuildKitSettings()
         s.imageReference = ""

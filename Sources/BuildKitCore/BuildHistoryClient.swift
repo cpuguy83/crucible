@@ -30,6 +30,29 @@ public struct ActiveBuild: Equatable, Sendable {
     }
 }
 
+public enum ActiveBuildStatus: Equatable, Sendable {
+    case notChecked
+    case checking
+    case stopped
+    case unavailable(String)
+    case ready(Int)
+
+    public var displayText: String {
+        switch self {
+        case .notChecked:
+            return "Not checked"
+        case .checking:
+            return "Checking..."
+        case .stopped:
+            return "BuildKit is not running"
+        case .unavailable(let message):
+            return "Unavailable: \(message)"
+        case .ready(let count):
+            return count == 0 ? "No active builds" : "\(count) active"
+        }
+    }
+}
+
 public struct BuildHistoryClient: Sendable {
     public var socketPath: String
 

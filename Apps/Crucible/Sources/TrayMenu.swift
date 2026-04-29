@@ -7,6 +7,8 @@ struct TrayMenu: View {
 
     var body: some View {
         Text(viewModel.statusText)
+        Text(viewModel.activeBuildsMenuText)
+            .foregroundStyle(.secondary)
 
         Divider()
 
