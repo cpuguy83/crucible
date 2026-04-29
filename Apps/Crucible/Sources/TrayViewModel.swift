@@ -534,9 +534,9 @@ final class TrayViewModel: ObservableObject {
         case .backendUnavailable(let backend):
             switch backend {
             case .containerization:
-                return "Selected backend is unavailable."
+                return "Apple Containerization framework backend is unavailable."
             case .containerCLI:
-                return "Apple container CLI backend is not implemented yet."
+                return "Apple container CLI backend is unavailable."
             }
         case .daemonConfigTooLarge(let bytes):
             return "BuildKit daemon config must be 256 KiB or smaller (currently \(bytes) bytes)."
