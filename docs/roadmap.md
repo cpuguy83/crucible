@@ -8,13 +8,14 @@
 - Unit tests for validator + supervisor.
 - README, LICENSE, Makefile, .gitignore.
 
-## M2 — Containerization backend MVP ✅ (code; pending hardware acceptance)
+## M2 — Containerization backend MVP ✅
 - `KernelLocator`: resolution chain — override path → Crucible-cached download
   → apple/container CLI install dir → fresh download via `KernelDownloader`.
 - `KernelDownloader`: mirrors `apple/containerization`'s
   `make fetch-default-kernel` — fetches the Kata Containers static release
-  tarball (pinned URL), extracts `opt/kata/share/kata-containers/vmlinux.container`
-  via `ContainerizationArchive`, caches the binary at a stable hash-keyed path.
+  tarball (pinned URL + SHA256), extracts
+  `opt/kata/share/kata-containers/vmlinux.container` via
+  `ContainerizationArchive`, caches the binary at a stable hash-keyed path.
 - Download progress is forwarded to `BuildKitBackend.progressStream` as
   `BuildKitProgress(phase: .downloadingKernel, ...)` with byte counts and a
   fraction when content-length is known.
@@ -23,7 +24,7 @@
 - `ContainerizationBackend`:
   - Build local OCI `LocalContentStore` + `ImageStore` under
     `~/Library/Application Support/Crucible/`.
-  - `ContainerManager(kernel:initfsReference:imageStore:network:)` pulls vminit.
+  - `ContainerManager(kernel:initfsReference:imageStore:network:rosetta:)` pulls vminit.
   - `manager.create(_:reference:)` pulls + unpacks `moby/buildkit` into a
     cached ext4 rootfs (`containers/crucible-buildkitd/rootfs.ext4`).
   - `UnixSocketConfiguration(.outOf)` exposes `/run/buildkit/buildkitd.sock`
@@ -31,16 +32,11 @@
   - `useInit = true` so signals/zombies are handled inside the container.
   - `container.create()` then `container.start()` launches buildkitd.
   - Host-side unix socket readiness check polled until success or 60s timeout.
+  - Rosetta is enabled automatically when available, binfmt_misc is registered
+    in the VM, and BuildKit advertises `linux/arm64` + `linux/amd64` by default.
   - Background `wait()` task transitions to `.degraded` if buildkitd exits
     unexpectedly.
   - Graceful `stop()` / `restart()` / `pullImage()`.
-
-### M2 outstanding
-- **Acceptance test on real Apple silicon hardware**: requires network access
-  to fetch the Kata kernel tarball (~140 MiB compressed, first run only),
-  the vminit OCI image, and `docker.io/moby/buildkit:buildx-stable-1`. Verify
-  `BUILDKIT_HOST=unix://~/Library/Application\ Support/Crucible/buildkitd.sock buildctl debug workers`
-  works from the host.
 
 ## M3 — Tray actions wired to real backend ✅
 - `TrayViewModel` subscribes to
@@ -48,6 +44,7 @@
 - Settings action calls `supervisor.pullImage()` for the applied BuildKit image.
 - Logs window tails `logStream`.
 - Error UX surfaces `BuildKitBackendError` cases legibly.
+- Hardware smoke verifies `buildctl debug workers` and amd64 builds.
 
 ## M4 — Settings window ✅
 - Editable backend kind, image reference, init reference, host socket
@@ -57,20 +54,25 @@
 - Default-aware sparse config encoding and legacy default migration.
 - Live-reload behavior on save with guarded lifecycle transitions.
 - Buildx, storage, diagnostics, and reset management panes.
+- Custom `buildkitd.toml` support with effective config diagnostics.
 
-## M5 — CLI backend
+## M5 — CLI backend ✅
 - `ContainerCLIBackend` real impl shelling out to `container`.
-- Discover binary, run `container run` + own host UDS exposure.
+- Discovers binary, starts `container system`, runs `container run` with
+  `--publish-socket`, `--rosetta`, persistent bind-mounted state, and generated
+  daemon config directory.
+- `crucibled --backend cli --smoke` verifies start/health/stop against an
+  isolated socket/app root.
 
-## M6 — Polish
+## M6 — Polish ✅ (scaffolded)
 - Autostart via `SMAppService`. ✅
-- Packaging script (`.app` zip).
-- Developer ID signing config.
-- Notarization plumbing.
+- Packaging script (`.app` zip). ✅
+- Developer ID signing config. ✅
+- Notarization plumbing. ✅
+- Factory reset, configuration reset, local-state reset. ✅
+- Diagnostics summary, prerequisite checks, and effective daemon config view. ✅
 
 ## Later
 - Build history & active solves panel (gRPC `Control` API).
 - Multi-instance / multi-version buildkitd.
-- SHA256 verification of the downloaded kernel tarball against a pinned
-  digest (currently we trust the GitHub release URL).
 - Bundle a kernel inside the `.app` to skip the first-run download entirely.
