@@ -1,5 +1,6 @@
 import SwiftUI
 import BuildKitCore
+import AppKit
 
 struct SettingsWindowView: View {
     @ObservedObject var viewModel: TrayViewModel
@@ -676,36 +677,11 @@ struct SettingsWindowView: View {
         let detail = BuildHistoryDetail(build)
 
         return VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(build.target.map { "\(build.frontend) / \($0)" } ?? build.frontend)
-                        .font(.callout.weight(.medium))
-                    Spacer()
-                    Text("\(build.completedSteps)/\(build.totalSteps) steps")
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                if build.totalSteps > 0 {
-                    ProgressView(value: Double(build.completedSteps), total: Double(build.totalSteps))
-                        .controlSize(.small)
-                }
-
-                HStack(spacing: 12) {
-                    Label("\(build.cachedSteps) cached", systemImage: "shippingbox")
-                    Label("\(build.warnings) warnings", systemImage: build.warnings == 0 ? "checkmark.circle" : "exclamationmark.triangle")
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-                Text(build.ref)
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .textSelection(.enabled)
+                activeBuildSummary(build, isExpanded: isExpanded)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        toggleBuildDetails(id)
+                    }
 
                 if isExpanded {
                     inlineBuildDetails(detail)
@@ -717,10 +693,6 @@ struct SettingsWindowView: View {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(isExpanded ? Color.accentColor.opacity(0.16) : Color(nsColor: .controlBackgroundColor))
         )
-        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .onTapGesture {
-            toggleBuildDetails(id)
-        }
     }
 
     private func recentBuildRow(_ build: RecentBuild) -> some View {
@@ -729,47 +701,11 @@ struct SettingsWindowView: View {
         let detail = BuildHistoryDetail(build)
 
         return VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .firstTextBaseline) {
-                    Label(
-                        build.succeeded ? "Completed" : "Failed",
-                        systemImage: build.succeeded ? "checkmark.circle" : "xmark.octagon"
-                    )
-                    .foregroundStyle(build.succeeded ? .green : .red)
-                    .font(.caption.weight(.medium))
-
-                    Text(build.target.map { "\(build.frontend) / \($0)" } ?? build.frontend)
-                        .font(.callout.weight(.medium))
-                    Spacer()
-                    Text(build.completedAt.map { Self.relativeDateFormatter.localizedString(for: $0, relativeTo: Date()) } ?? "unknown time")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                HStack(spacing: 12) {
-                    Label("\(build.completedSteps)/\(build.totalSteps) steps", systemImage: "checklist")
-                    Label("\(build.cachedSteps) cached", systemImage: "shippingbox")
-                    Label("\(build.warnings) warnings", systemImage: build.warnings == 0 ? "checkmark.circle" : "exclamationmark.triangle")
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-                if let errorMessage = build.errorMessage {
-                    Text(errorMessage)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                        .lineLimit(2)
-                        .textSelection(.enabled)
-                }
-
-                Text(build.ref)
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .textSelection(.enabled)
+                recentBuildSummary(build, isExpanded: isExpanded)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        toggleBuildDetails(id)
+                    }
 
                 if isExpanded {
                     inlineBuildDetails(detail)
@@ -781,9 +717,92 @@ struct SettingsWindowView: View {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(isExpanded ? Color.accentColor.opacity(0.16) : Color(nsColor: .controlBackgroundColor))
         )
-        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .onTapGesture {
-            toggleBuildDetails(id)
+    }
+
+    private func activeBuildSummary(_ build: ActiveBuild, isExpanded: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(build.target.map { "\(build.frontend) / \($0)" } ?? build.frontend)
+                    .font(.callout.weight(.medium))
+                Spacer()
+                Text("\(build.completedSteps)/\(build.totalSteps) steps")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if build.totalSteps > 0 {
+                ProgressView(value: Double(build.completedSteps), total: Double(build.totalSteps))
+                    .controlSize(.small)
+            }
+
+            HStack(spacing: 12) {
+                Label("\(build.cachedSteps) cached", systemImage: "shippingbox")
+                Label("\(build.warnings) warnings", systemImage: build.warnings == 0 ? "checkmark.circle" : "exclamationmark.triangle")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            Text(build.ref)
+                .font(.caption.monospaced())
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
+        }
+    }
+
+    private func recentBuildSummary(_ build: RecentBuild, isExpanded: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                Label(
+                    build.succeeded ? "Completed" : "Failed",
+                    systemImage: build.succeeded ? "checkmark.circle" : "xmark.octagon"
+                )
+                .foregroundStyle(build.succeeded ? .green : .red)
+                .font(.caption.weight(.medium))
+
+                if build.pinned {
+                    Label("Pinned", systemImage: "pin.fill")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                }
+
+                Text(build.target.map { "\(build.frontend) / \($0)" } ?? build.frontend)
+                    .font(.callout.weight(.medium))
+                Spacer()
+                Text(build.completedAt.map { Self.relativeDateFormatter.localizedString(for: $0, relativeTo: Date()) } ?? "unknown time")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack(spacing: 12) {
+                Label("\(build.completedSteps)/\(build.totalSteps) steps", systemImage: "checklist")
+                Label("\(build.cachedSteps) cached", systemImage: "shippingbox")
+                Label("\(build.warnings) warnings", systemImage: build.warnings == 0 ? "checkmark.circle" : "exclamationmark.triangle")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            if let errorMessage = build.errorMessage {
+                Text(errorMessage)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .lineLimit(2)
+                    .textSelection(.enabled)
+            }
+
+            Text(build.ref)
+                .font(.caption.monospaced())
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
         }
     }
 
@@ -795,12 +814,9 @@ struct SettingsWindowView: View {
                     Text("Build Details")
                         .font(.callout.weight(.medium))
                     Spacer()
-                    Button("Copy Details") {
-                        copy(detail.debugText)
-                    }
-                    Button("Copy Ref") {
-                        copy(detail.ref)
-                    }
+                }
+
+                HStack {
                     Button("View Build Logs") {
                         viewModel.openBuildLogsWindow(ref: detail.ref)
                     }
@@ -809,10 +825,26 @@ struct SettingsWindowView: View {
                             viewModel.exportBuildTrace(trace, suggestedName: detail.ref)
                         }
                     }
+                    Spacer()
                 }
 
-                detailRow("Ref", detail.ref)
+                if detail.isRecent {
+                    HStack {
+                        Button(detail.pinned ? "Unpin" : "Pin") {
+                            viewModel.setBuildPinned(ref: detail.ref, pinned: !detail.pinned)
+                        }
+                        Button("Delete", role: .destructive) {
+                            viewModel.deleteBuildRecord(ref: detail.ref)
+                        }
+                        Spacer()
+                    }
+                }
+
+                detailRow("Ref", detail.ref, copyable: true)
                 detailRow("Kind", detail.kind)
+                if detail.isRecent {
+                    detailRow("Pinned", detail.pinned ? "yes" : "no")
+                }
                 detailRow("Frontend", detail.frontend)
                 detailRow("Target", detail.target ?? "none")
                 detailRow("Steps", "\(detail.completedSteps)/\(detail.totalSteps)")
@@ -856,7 +888,7 @@ struct SettingsWindowView: View {
             .clipped()
     }
 
-    private func detailRow(_ label: String, _ value: String) -> some View {
+    private func detailRow(_ label: String, _ value: String, copyable: Bool = false) -> some View {
         HStack(alignment: .firstTextBaseline) {
             Text(label)
                 .font(.caption.weight(.medium))
@@ -865,6 +897,17 @@ struct SettingsWindowView: View {
             Text(value)
                 .font(.caption.monospaced())
                 .textSelection(.enabled)
+            if copyable {
+                Button {
+                    copy(value)
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help("Copy \(label)")
+                .pointingHandOnHover()
+            }
             Spacer()
         }
     }
@@ -1001,9 +1044,22 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
     }
 }
 
+private extension View {
+    func pointingHandOnHover() -> some View {
+        onHover { hovering in
+            if hovering {
+                NSCursor.pointingHand.set()
+            } else {
+                NSCursor.arrow.set()
+            }
+        }
+    }
+}
+
 private struct BuildHistoryDetail {
     var ref: String
     var kind: String
+    var isRecent: Bool
     var frontend: String
     var target: String?
     var completedSteps: Int
@@ -1016,10 +1072,12 @@ private struct BuildHistoryDetail {
     var errorMessage: String?
     var frontendAttrs: [String: String]
     var trace: BuildHistoryDescriptor?
+    var pinned: Bool
 
     init(_ build: ActiveBuild) {
         self.ref = build.ref
         self.kind = "Active"
+        self.isRecent = false
         self.frontend = build.frontend
         self.target = build.target
         self.completedSteps = build.completedSteps
@@ -1032,11 +1090,13 @@ private struct BuildHistoryDetail {
         self.errorMessage = nil
         self.frontendAttrs = build.frontendAttrs
         self.trace = nil
+        self.pinned = false
     }
 
     init(_ build: RecentBuild) {
         self.ref = build.ref
         self.kind = build.succeeded ? "Recent completed" : "Recent failed"
+        self.isRecent = true
         self.frontend = build.frontend
         self.target = build.target
         self.completedSteps = build.completedSteps
@@ -1049,6 +1109,7 @@ private struct BuildHistoryDetail {
         self.errorMessage = build.errorMessage
         self.frontendAttrs = build.frontendAttrs
         self.trace = build.trace
+        self.pinned = build.pinned
     }
 
     var title: String {
@@ -1066,6 +1127,7 @@ private struct BuildHistoryDetail {
         var lines = [
             "ref=\(ref)",
             "kind=\(kind)",
+            "pinned=\(pinned)",
             "frontend=\(frontend)",
             "target=\(target ?? "")",
             "completedSteps=\(completedSteps)",

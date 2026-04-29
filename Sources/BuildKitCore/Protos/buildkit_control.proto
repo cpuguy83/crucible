@@ -7,6 +7,7 @@ import "google/protobuf/timestamp.proto";
 service Control {
   rpc Status(StatusRequest) returns (stream StatusResponse);
   rpc ListenBuildHistory(BuildHistoryRequest) returns (stream BuildHistoryEvent);
+  rpc UpdateBuildHistory(UpdateBuildHistoryRequest) returns (UpdateBuildHistoryResponse);
 }
 
 message StatusRequest {
@@ -67,6 +68,7 @@ message BuildHistoryRecord {
   google.protobuf.Timestamp CreatedAt = 6;
   google.protobuf.Timestamp CompletedAt = 7;
   Descriptor trace = 13;
+  bool pinned = 14;
   int32 numCachedSteps = 15;
   int32 numTotalSteps = 16;
   int32 numCompletedSteps = 17;
@@ -84,3 +86,12 @@ message Descriptor {
   int64 size = 3;
   map<string, string> annotations = 5;
 }
+
+message UpdateBuildHistoryRequest {
+  string Ref = 1;
+  bool Pinned = 2;
+  bool Delete = 3;
+  bool Finalize = 4;
+}
+
+message UpdateBuildHistoryResponse {}

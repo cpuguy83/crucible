@@ -46,10 +46,24 @@ public enum Moby_Buildkit_V1_Control: Sendable {
                 type: .serverStreaming
             )
         }
+        /// Namespace for "UpdateBuildHistory" metadata.
+        public enum UpdateBuildHistory: Sendable {
+            /// Request type for "UpdateBuildHistory".
+            public typealias Input = Moby_Buildkit_V1_UpdateBuildHistoryRequest
+            /// Response type for "UpdateBuildHistory".
+            public typealias Output = Moby_Buildkit_V1_UpdateBuildHistoryResponse
+            /// Descriptor for "UpdateBuildHistory".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "moby.buildkit.v1.Control"),
+                method: "UpdateBuildHistory",
+                type: .unary
+            )
+        }
         /// Descriptors for all methods in the "moby.buildkit.v1.Control" service.
         public static let descriptors: [GRPCCore.MethodDescriptor] = [
             Status.descriptor,
-            ListenBuildHistory.descriptor
+            ListenBuildHistory.descriptor,
+            UpdateBuildHistory.descriptor
         ]
     }
 }
@@ -105,6 +119,25 @@ extension Moby_Buildkit_V1_Control {
             deserializer: some GRPCCore.MessageDeserializer<Moby_Buildkit_V1_BuildHistoryEvent>,
             options: GRPCCore.CallOptions,
             onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Moby_Buildkit_V1_BuildHistoryEvent>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "UpdateBuildHistory" method.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Moby_Buildkit_V1_UpdateBuildHistoryRequest` message.
+        ///   - serializer: A serializer for `Moby_Buildkit_V1_UpdateBuildHistoryRequest` messages.
+        ///   - deserializer: A deserializer for `Moby_Buildkit_V1_UpdateBuildHistoryResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response, the result of which is
+        ///       returned to the caller. Returning from the closure will cancel the RPC if it
+        ///       hasn't already finished.
+        /// - Returns: The result of `handleResponse`.
+        func updateBuildHistory<Result>(
+            request: GRPCCore.ClientRequest<Moby_Buildkit_V1_UpdateBuildHistoryRequest>,
+            serializer: some GRPCCore.MessageSerializer<Moby_Buildkit_V1_UpdateBuildHistoryRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Moby_Buildkit_V1_UpdateBuildHistoryResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Moby_Buildkit_V1_UpdateBuildHistoryResponse>) async throws -> Result
         ) async throws -> Result where Result: Sendable
     }
 
@@ -179,6 +212,36 @@ extension Moby_Buildkit_V1_Control {
                 onResponse: handleResponse
             )
         }
+
+        /// Call the "UpdateBuildHistory" method.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Moby_Buildkit_V1_UpdateBuildHistoryRequest` message.
+        ///   - serializer: A serializer for `Moby_Buildkit_V1_UpdateBuildHistoryRequest` messages.
+        ///   - deserializer: A deserializer for `Moby_Buildkit_V1_UpdateBuildHistoryResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response, the result of which is
+        ///       returned to the caller. Returning from the closure will cancel the RPC if it
+        ///       hasn't already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func updateBuildHistory<Result>(
+            request: GRPCCore.ClientRequest<Moby_Buildkit_V1_UpdateBuildHistoryRequest>,
+            serializer: some GRPCCore.MessageSerializer<Moby_Buildkit_V1_UpdateBuildHistoryRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Moby_Buildkit_V1_UpdateBuildHistoryResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Moby_Buildkit_V1_UpdateBuildHistoryResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Moby_Buildkit_V1_Control.Method.UpdateBuildHistory.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
     }
 }
 
@@ -226,6 +289,31 @@ extension Moby_Buildkit_V1_Control.ClientProtocol {
             request: request,
             serializer: GRPCProtobuf.ProtobufSerializer<Moby_Buildkit_V1_BuildHistoryRequest>(),
             deserializer: GRPCProtobuf.ProtobufDeserializer<Moby_Buildkit_V1_BuildHistoryEvent>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "UpdateBuildHistory" method.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Moby_Buildkit_V1_UpdateBuildHistoryRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response, the result of which is
+    ///       returned to the caller. Returning from the closure will cancel the RPC if it
+    ///       hasn't already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func updateBuildHistory<Result>(
+        request: GRPCCore.ClientRequest<Moby_Buildkit_V1_UpdateBuildHistoryRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Moby_Buildkit_V1_UpdateBuildHistoryResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.updateBuildHistory(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Moby_Buildkit_V1_UpdateBuildHistoryRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Moby_Buildkit_V1_UpdateBuildHistoryResponse>(),
             options: options,
             onResponse: handleResponse
         )
@@ -283,6 +371,35 @@ extension Moby_Buildkit_V1_Control.ClientProtocol {
             metadata: metadata
         )
         return try await self.listenBuildHistory(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "UpdateBuildHistory" method.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response, the result of which is
+    ///       returned to the caller. Returning from the closure will cancel the RPC if it
+    ///       hasn't already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func updateBuildHistory<Result>(
+        _ message: Moby_Buildkit_V1_UpdateBuildHistoryRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Moby_Buildkit_V1_UpdateBuildHistoryResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Moby_Buildkit_V1_UpdateBuildHistoryRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.updateBuildHistory(
             request: request,
             options: options,
             onResponse: handleResponse

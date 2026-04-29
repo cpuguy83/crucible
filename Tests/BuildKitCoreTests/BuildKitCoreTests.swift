@@ -147,6 +147,7 @@ struct SettingsValidatorTests {
         record.trace.mediaType = "application/vnd.buildkit.otlp.json.v0"
         record.trace.digest = "sha256:abc123"
         record.trace.size = 42
+        record.pinned = true
 
         let build = RecentBuild(record: record)
 
@@ -163,6 +164,7 @@ struct SettingsValidatorTests {
         #expect(build.trace?.mediaType == "application/vnd.buildkit.otlp.json.v0")
         #expect(build.trace?.digest == "sha256:abc123")
         #expect(build.trace?.size == 42)
+        #expect(build.pinned)
         #expect(!build.succeeded)
     }
 

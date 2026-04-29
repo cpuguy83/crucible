@@ -253,6 +253,11 @@ public struct Moby_Buildkit_V1_BuildHistoryRecord: @unchecked Sendable {
   /// Clears the value of `trace`. Subsequent reads from it will return its default value.
   public mutating func clearTrace() {_uniqueStorage()._trace = nil}
 
+  public var pinned: Bool {
+    get {_storage._pinned}
+    set {_uniqueStorage()._pinned = newValue}
+  }
+
   public var numCachedSteps: Int32 {
     get {_storage._numCachedSteps}
     set {_uniqueStorage()._numCachedSteps = newValue}
@@ -306,6 +311,34 @@ public struct Moby_Buildkit_V1_Descriptor: Sendable {
   public var size: Int64 = 0
 
   public var annotations: Dictionary<String,String> = [:]
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Moby_Buildkit_V1_UpdateBuildHistoryRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var ref: String = String()
+
+  public var pinned: Bool = false
+
+  public var delete: Bool = false
+
+  public var finalize: Bool = false
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Moby_Buildkit_V1_UpdateBuildHistoryResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -620,7 +653,7 @@ extension Moby_Buildkit_V1_BuildHistoryEvent: SwiftProtobuf.Message, SwiftProtob
 
 extension Moby_Buildkit_V1_BuildHistoryRecord: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".BuildHistoryRecord"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}Ref\0\u{1}Frontend\0\u{1}FrontendAttrs\0\u{2}\u{2}error\0\u{1}CreatedAt\0\u{1}CompletedAt\0\u{2}\u{6}trace\0\u{2}\u{2}numCachedSteps\0\u{1}numTotalSteps\0\u{1}numCompletedSteps\0\u{2}\u{2}numWarnings\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}Ref\0\u{1}Frontend\0\u{1}FrontendAttrs\0\u{2}\u{2}error\0\u{1}CreatedAt\0\u{1}CompletedAt\0\u{2}\u{6}trace\0\u{1}pinned\0\u{1}numCachedSteps\0\u{1}numTotalSteps\0\u{1}numCompletedSteps\0\u{2}\u{2}numWarnings\0")
 
   fileprivate class _StorageClass {
     var _ref: String = String()
@@ -630,6 +663,7 @@ extension Moby_Buildkit_V1_BuildHistoryRecord: SwiftProtobuf.Message, SwiftProto
     var _createdAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
     var _completedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
     var _trace: Moby_Buildkit_V1_Descriptor? = nil
+    var _pinned: Bool = false
     var _numCachedSteps: Int32 = 0
     var _numTotalSteps: Int32 = 0
     var _numCompletedSteps: Int32 = 0
@@ -651,6 +685,7 @@ extension Moby_Buildkit_V1_BuildHistoryRecord: SwiftProtobuf.Message, SwiftProto
       _createdAt = source._createdAt
       _completedAt = source._completedAt
       _trace = source._trace
+      _pinned = source._pinned
       _numCachedSteps = source._numCachedSteps
       _numTotalSteps = source._numTotalSteps
       _numCompletedSteps = source._numCompletedSteps
@@ -680,6 +715,7 @@ extension Moby_Buildkit_V1_BuildHistoryRecord: SwiftProtobuf.Message, SwiftProto
         case 6: try { try decoder.decodeSingularMessageField(value: &_storage._createdAt) }()
         case 7: try { try decoder.decodeSingularMessageField(value: &_storage._completedAt) }()
         case 13: try { try decoder.decodeSingularMessageField(value: &_storage._trace) }()
+        case 14: try { try decoder.decodeSingularBoolField(value: &_storage._pinned) }()
         case 15: try { try decoder.decodeSingularInt32Field(value: &_storage._numCachedSteps) }()
         case 16: try { try decoder.decodeSingularInt32Field(value: &_storage._numTotalSteps) }()
         case 17: try { try decoder.decodeSingularInt32Field(value: &_storage._numCompletedSteps) }()
@@ -717,6 +753,9 @@ extension Moby_Buildkit_V1_BuildHistoryRecord: SwiftProtobuf.Message, SwiftProto
       try { if let v = _storage._trace {
         try visitor.visitSingularMessageField(value: v, fieldNumber: 13)
       } }()
+      if _storage._pinned != false {
+        try visitor.visitSingularBoolField(value: _storage._pinned, fieldNumber: 14)
+      }
       if _storage._numCachedSteps != 0 {
         try visitor.visitSingularInt32Field(value: _storage._numCachedSteps, fieldNumber: 15)
       }
@@ -745,6 +784,7 @@ extension Moby_Buildkit_V1_BuildHistoryRecord: SwiftProtobuf.Message, SwiftProto
         if _storage._createdAt != rhs_storage._createdAt {return false}
         if _storage._completedAt != rhs_storage._completedAt {return false}
         if _storage._trace != rhs_storage._trace {return false}
+        if _storage._pinned != rhs_storage._pinned {return false}
         if _storage._numCachedSteps != rhs_storage._numCachedSteps {return false}
         if _storage._numTotalSteps != rhs_storage._numTotalSteps {return false}
         if _storage._numCompletedSteps != rhs_storage._numCompletedSteps {return false}
@@ -833,6 +873,70 @@ extension Moby_Buildkit_V1_Descriptor: SwiftProtobuf.Message, SwiftProtobuf._Mes
     if lhs.digest != rhs.digest {return false}
     if lhs.size != rhs.size {return false}
     if lhs.annotations != rhs.annotations {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Moby_Buildkit_V1_UpdateBuildHistoryRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".UpdateBuildHistoryRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}Ref\0\u{1}Pinned\0\u{1}Delete\0\u{1}Finalize\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.ref) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.pinned) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.delete) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.finalize) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.ref.isEmpty {
+      try visitor.visitSingularStringField(value: self.ref, fieldNumber: 1)
+    }
+    if self.pinned != false {
+      try visitor.visitSingularBoolField(value: self.pinned, fieldNumber: 2)
+    }
+    if self.delete != false {
+      try visitor.visitSingularBoolField(value: self.delete, fieldNumber: 3)
+    }
+    if self.finalize != false {
+      try visitor.visitSingularBoolField(value: self.finalize, fieldNumber: 4)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Moby_Buildkit_V1_UpdateBuildHistoryRequest, rhs: Moby_Buildkit_V1_UpdateBuildHistoryRequest) -> Bool {
+    if lhs.ref != rhs.ref {return false}
+    if lhs.pinned != rhs.pinned {return false}
+    if lhs.delete != rhs.delete {return false}
+    if lhs.finalize != rhs.finalize {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Moby_Buildkit_V1_UpdateBuildHistoryResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".UpdateBuildHistoryResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Moby_Buildkit_V1_UpdateBuildHistoryResponse, rhs: Moby_Buildkit_V1_UpdateBuildHistoryResponse) -> Bool {
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

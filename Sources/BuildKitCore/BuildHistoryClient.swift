@@ -75,6 +75,7 @@ public struct RecentBuild: Equatable, Sendable, Identifiable {
     public var errorCode: Int?
     public var frontendAttrs: [String: String]
     public var trace: BuildHistoryDescriptor?
+    public var pinned: Bool
 
     public init(
         ref: String,
@@ -89,7 +90,8 @@ public struct RecentBuild: Equatable, Sendable, Identifiable {
         errorMessage: String?,
         errorCode: Int? = nil,
         frontendAttrs: [String: String] = [:],
-        trace: BuildHistoryDescriptor? = nil
+        trace: BuildHistoryDescriptor? = nil,
+        pinned: Bool = false
     ) {
         self.ref = ref
         self.frontend = frontend
@@ -104,6 +106,7 @@ public struct RecentBuild: Equatable, Sendable, Identifiable {
         self.errorCode = errorCode
         self.frontendAttrs = frontendAttrs
         self.trace = trace
+        self.pinned = pinned
     }
 
     public var succeeded: Bool { errorMessage == nil }
@@ -372,6 +375,27 @@ public struct BuildHistoryClient: Sendable {
             }
         }
     }
+
+    @available(macOS 15.0, *)
+    public func updateBuildHistory(ref: String, pinned: Bool? = nil, delete: Bool = false, finalize: Bool = false) async throws {
+        let transport = try HTTP2ClientTransport.Posix(
+            target: .unixDomainSocket(path: socketPath),
+            transportSecurity: .plaintext
+        )
+
+        try await withGRPCClient(transport: transport) { client in
+            var request = Moby_Buildkit_V1_UpdateBuildHistoryRequest()
+            request.ref = ref
+            if let pinned {
+                request.pinned = pinned
+            }
+            request.delete = delete
+            request.finalize = finalize
+
+            let control = Moby_Buildkit_V1_Control.Client(wrapping: client)
+            _ = try await control.updateBuildHistory(request)
+        }
+    }
 }
 
 func buildLogLines(from update: Moby_Buildkit_V1_StatusResponse) -> [BuildLogLine] {
@@ -482,7 +506,8 @@ extension RecentBuild {
             errorMessage: record.hasError && !record.error.message.isEmpty ? record.error.message : nil,
             errorCode: record.hasError ? Int(record.error.code) : nil,
             frontendAttrs: record.frontendAttrs,
-            trace: record.hasTrace ? BuildHistoryDescriptor(record.trace) : nil
+            trace: record.hasTrace ? BuildHistoryDescriptor(record.trace) : nil,
+            pinned: record.pinned
         )
     }
 }

@@ -512,6 +512,59 @@ final class TrayViewModel: ObservableObject {
         }
     }
 
+    func setBuildPinned(ref: String, pinned: Bool) {
+        guard let endpoint else {
+            logStore.append(source: .supervisor, level: .warning, "build history unavailable: BuildKit is not running")
+            return
+        }
+
+        Task {
+            do {
+                try await BuildHistoryClient(socketPath: endpoint.socketPath).updateBuildHistory(ref: ref, pinned: pinned)
+                await MainActor.run {
+                    self.logStore.append(source: .supervisor, level: .info, "\(pinned ? "Pinned" : "Unpinned") build \(ref)")
+                }
+            } catch {
+                let msg = buildKitUserMessage(for: error)
+                await MainActor.run {
+                    self.logStore.append(source: .supervisor, level: .error, "failed to update build history: \(msg)")
+                    NSAlert(error: error).runModal()
+                }
+            }
+        }
+    }
+
+    func deleteBuildRecord(ref: String) {
+        guard let endpoint else {
+            logStore.append(source: .supervisor, level: .warning, "build history unavailable: BuildKit is not running")
+            return
+        }
+
+        let alert = NSAlert()
+        alert.messageText = "Delete Build Record?"
+        alert.informativeText = "This removes the build history record for \(ref). It does not cancel a running build."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Delete")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        Task {
+            do {
+                try await BuildHistoryClient(socketPath: endpoint.socketPath).updateBuildHistory(ref: ref, delete: true)
+                await MainActor.run {
+                    self.recentBuilds.removeAll { $0.ref == ref }
+                    self.logStore.append(source: .supervisor, level: .info, "Deleted build record \(ref)")
+                }
+            } catch {
+                let msg = buildKitUserMessage(for: error)
+                await MainActor.run {
+                    self.logStore.append(source: .supervisor, level: .error, "failed to delete build record: \(msg)")
+                    NSAlert(error: error).runModal()
+                }
+            }
+        }
+    }
+
     func openSettingsWindow() {
         if settingsWindowController == nil {
             settingsWindowController = SettingsWindowController(viewModel: self) { [weak self] in
