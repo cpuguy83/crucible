@@ -47,7 +47,7 @@ struct TrayMenu: View {
 
         Divider()
         Button("Quit Crucible") {
-            NSApplication.shared.terminate(nil)
+            AppDelegate.requestQuit()
         }
         .keyboardShortcut("q")
     }
