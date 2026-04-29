@@ -79,6 +79,8 @@ struct SettingsWindowView: View {
                     generalView
                 case .buildx:
                     buildxView
+                case .builds:
+                    buildsView
                 case .storage:
                     storageView
                 case .reset:
@@ -350,6 +352,51 @@ struct SettingsWindowView: View {
         }
     }
 
+    private var buildsView: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            card("Overview") {
+                metricRow("Stream", viewModel.buildHistoryStatusText)
+                metricRow("Active", "\(viewModel.activeBuilds.count)")
+                metricRow("Recent", viewModel.recentBuildsStatusText)
+                HStack {
+                    Button("Reconnect Stream", action: viewModel.refreshActiveBuilds)
+                        .disabled(viewModel.endpoint == nil)
+                    Text("Crucible subscribes to BuildKit build history while the daemon is running.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            card("Active Builds") {
+                if viewModel.activeBuilds.isEmpty {
+                    Text("No builds are currently active.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                } else {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(viewModel.activeBuilds, id: \.ref) { build in
+                            activeBuildRow(build)
+                        }
+                    }
+                }
+            }
+
+            card("Recent Builds") {
+                if viewModel.recentBuilds.isEmpty {
+                    Text("No recent build history records are available yet.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                } else {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(viewModel.recentBuilds) { build in
+                            recentBuildRow(build)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     private var resetView: some View {
         VStack(alignment: .leading, spacing: 16) {
             card("Reset Options") {
@@ -399,38 +446,6 @@ struct SettingsWindowView: View {
                 metricRow("Platforms", viewModel.configuredWorkerPlatforms)
                 metricRow("Rosetta", "enabled automatically when available")
                 metricRow("Last Error", viewModel.lastError ?? "none")
-            }
-
-            card("Active Builds") {
-                HStack {
-                    Button("Refresh Active Builds", action: viewModel.refreshActiveBuilds)
-                        .disabled(viewModel.endpoint == nil)
-                    Text(viewModel.activeBuildsStatusText)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-
-                if viewModel.activeBuilds.isEmpty {
-                    Text("No active build history records are currently visible.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                } else {
-                    VStack(alignment: .leading, spacing: 10) {
-                        ForEach(viewModel.activeBuilds, id: \.ref) { build in
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(build.target.map { "\(build.frontend) / \($0)" } ?? build.frontend)
-                                    .font(.callout.weight(.medium))
-                                Text(build.ref)
-                                    .font(.caption.monospaced())
-                                    .foregroundStyle(.secondary)
-                                    .textSelection(.enabled)
-                                Text("\(build.completedSteps)/\(build.totalSteps) steps, \(build.cachedSteps) cached, \(build.warnings) warnings")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                }
             }
 
             card("Effective Daemon Config") {
@@ -653,6 +668,97 @@ struct SettingsWindowView: View {
         }
     }
 
+    private func activeBuildRow(_ build: ActiveBuild) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(build.target.map { "\(build.frontend) / \($0)" } ?? build.frontend)
+                    .font(.callout.weight(.medium))
+                Spacer()
+                Text("\(build.completedSteps)/\(build.totalSteps) steps")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+
+            if build.totalSteps > 0 {
+                ProgressView(value: Double(build.completedSteps), total: Double(build.totalSteps))
+                    .controlSize(.small)
+            }
+
+            HStack(spacing: 12) {
+                Label("\(build.cachedSteps) cached", systemImage: "shippingbox")
+                Label("\(build.warnings) warnings", systemImage: build.warnings == 0 ? "checkmark.circle" : "exclamationmark.triangle")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            Text(build.ref)
+                .font(.caption.monospaced())
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor))
+        )
+    }
+
+    private func recentBuildRow(_ build: RecentBuild) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                Label(
+                    build.succeeded ? "Completed" : "Failed",
+                    systemImage: build.succeeded ? "checkmark.circle" : "xmark.octagon"
+                )
+                .foregroundStyle(build.succeeded ? .green : .red)
+                .font(.caption.weight(.medium))
+
+                Text(build.target.map { "\(build.frontend) / \($0)" } ?? build.frontend)
+                    .font(.callout.weight(.medium))
+                Spacer()
+                Text(build.completedAt.map { Self.relativeDateFormatter.localizedString(for: $0, relativeTo: Date()) } ?? "unknown time")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack(spacing: 12) {
+                Label("\(build.completedSteps)/\(build.totalSteps) steps", systemImage: "checklist")
+                Label("\(build.cachedSteps) cached", systemImage: "shippingbox")
+                Label("\(build.warnings) warnings", systemImage: build.warnings == 0 ? "checkmark.circle" : "exclamationmark.triangle")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            if let errorMessage = build.errorMessage {
+                Text(errorMessage)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .lineLimit(2)
+                    .textSelection(.enabled)
+            }
+
+            Text(build.ref)
+                .font(.caption.monospaced())
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor))
+        )
+    }
+
+    private static let relativeDateFormatter: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .short
+        return formatter
+    }()
+
     private func copy(_ text: String) {
         let pb = NSPasteboard.general
         pb.clearContents()
@@ -709,6 +815,7 @@ struct SettingsWindowView: View {
 private enum SettingsSection: String, CaseIterable, Identifiable {
     case general
     case buildx
+    case builds
     case storage
     case reset
     case diagnostics
@@ -719,6 +826,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
         switch self {
         case .general: "General"
         case .buildx: "Buildx"
+        case .builds: "Builds"
         case .storage: "Storage"
         case .reset: "Reset"
         case .diagnostics: "Diagnostics"
@@ -729,6 +837,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
         switch self {
         case .general: "Control the BuildKit daemon and copy its endpoint."
         case .buildx: "Manage docker buildx integration."
+        case .builds: "Watch active BuildKit solves."
         case .storage: "Manage cache, metadata, and persistent state."
         case .reset: "Reset configuration or local data."
         case .diagnostics: "Inspect current state and collect troubleshooting details."
@@ -739,6 +848,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
         switch self {
         case .general: "switch.2"
         case .buildx: "hammer"
+        case .builds: "list.bullet.rectangle"
         case .storage: "internaldrive"
         case .reset: "arrow.counterclockwise"
         case .diagnostics: "stethoscope"

@@ -132,6 +132,30 @@ struct SettingsValidatorTests {
         #expect(build.warnings == 1)
     }
 
+    @Test func recentBuildMapsBuildHistoryRecord() {
+        var record = Moby_Buildkit_V1_BuildHistoryRecord()
+        record.ref = "build-456"
+        record.frontend = "dockerfile.v0"
+        record.frontendAttrs["target"] = "debug"
+        record.numCompletedSteps = 4
+        record.numTotalSteps = 4
+        record.numCachedSteps = 1
+        record.numWarnings = 2
+        record.error.message = "compile failed"
+
+        let build = RecentBuild(record: record)
+
+        #expect(build.ref == "build-456")
+        #expect(build.frontend == "dockerfile.v0")
+        #expect(build.target == "debug")
+        #expect(build.completedSteps == 4)
+        #expect(build.totalSteps == 4)
+        #expect(build.cachedSteps == 1)
+        #expect(build.warnings == 2)
+        #expect(build.errorMessage == "compile failed")
+        #expect(!build.succeeded)
+    }
+
     @Test func activeBuildStatusDisplayText() {
         #expect(ActiveBuildStatus.notChecked.displayText == "Not checked")
         #expect(ActiveBuildStatus.checking.displayText == "Checking...")
@@ -140,6 +164,16 @@ struct SettingsValidatorTests {
         #expect(ActiveBuildStatus.ready(0).displayText == "No active builds")
         #expect(ActiveBuildStatus.ready(2).displayText == "2 active")
         #expect(ActiveBuildStatus.unavailable("socket closed").displayText == "Unavailable: socket closed")
+    }
+
+    @Test func recentBuildStatusDisplayText() {
+        #expect(RecentBuildsStatus.notChecked.displayText == "Not checked")
+        #expect(RecentBuildsStatus.checking.displayText == "Checking...")
+        #expect(RecentBuildsStatus.reconnecting("connection refused").displayText == "Reconnecting: connection refused")
+        #expect(RecentBuildsStatus.stopped.displayText == "BuildKit is not running")
+        #expect(RecentBuildsStatus.ready(0).displayText == "No recent builds")
+        #expect(RecentBuildsStatus.ready(3).displayText == "3 recent")
+        #expect(RecentBuildsStatus.unavailable("socket closed").displayText == "Unavailable: socket closed")
     }
 
     @Test func unavailableActiveBuildErrorsAreTransient() {
