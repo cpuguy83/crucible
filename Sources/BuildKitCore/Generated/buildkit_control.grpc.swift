@@ -20,6 +20,19 @@ public enum Moby_Buildkit_V1_Control: Sendable {
     public static let descriptor = GRPCCore.ServiceDescriptor(fullyQualifiedService: "moby.buildkit.v1.Control")
     /// Namespace for method metadata.
     public enum Method: Sendable {
+        /// Namespace for "Status" metadata.
+        public enum Status: Sendable {
+            /// Request type for "Status".
+            public typealias Input = Moby_Buildkit_V1_StatusRequest
+            /// Response type for "Status".
+            public typealias Output = Moby_Buildkit_V1_StatusResponse
+            /// Descriptor for "Status".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "moby.buildkit.v1.Control"),
+                method: "Status",
+                type: .serverStreaming
+            )
+        }
         /// Namespace for "ListenBuildHistory" metadata.
         public enum ListenBuildHistory: Sendable {
             /// Request type for "ListenBuildHistory".
@@ -35,6 +48,7 @@ public enum Moby_Buildkit_V1_Control: Sendable {
         }
         /// Descriptors for all methods in the "moby.buildkit.v1.Control" service.
         public static let descriptors: [GRPCCore.MethodDescriptor] = [
+            Status.descriptor,
             ListenBuildHistory.descriptor
         ]
     }
@@ -55,6 +69,25 @@ extension Moby_Buildkit_V1_Control {
     /// You don't need to implement this protocol directly, use the generated
     /// implementation, ``Client``.
     public protocol ClientProtocol: Sendable {
+        /// Call the "Status" method.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Moby_Buildkit_V1_StatusRequest` message.
+        ///   - serializer: A serializer for `Moby_Buildkit_V1_StatusRequest` messages.
+        ///   - deserializer: A deserializer for `Moby_Buildkit_V1_StatusResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response, the result of which is
+        ///       returned to the caller. Returning from the closure will cancel the RPC if it
+        ///       hasn't already finished.
+        /// - Returns: The result of `handleResponse`.
+        func status<Result>(
+            request: GRPCCore.ClientRequest<Moby_Buildkit_V1_StatusRequest>,
+            serializer: some GRPCCore.MessageSerializer<Moby_Buildkit_V1_StatusRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Moby_Buildkit_V1_StatusResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Moby_Buildkit_V1_StatusResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
         /// Call the "ListenBuildHistory" method.
         ///
         /// - Parameters:
@@ -91,6 +124,34 @@ extension Moby_Buildkit_V1_Control {
             self.client = client
         }
 
+        /// Call the "Status" method.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Moby_Buildkit_V1_StatusRequest` message.
+        ///   - serializer: A serializer for `Moby_Buildkit_V1_StatusRequest` messages.
+        ///   - deserializer: A deserializer for `Moby_Buildkit_V1_StatusResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response, the result of which is
+        ///       returned to the caller. Returning from the closure will cancel the RPC if it
+        ///       hasn't already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func status<Result>(
+            request: GRPCCore.ClientRequest<Moby_Buildkit_V1_StatusRequest>,
+            serializer: some GRPCCore.MessageSerializer<Moby_Buildkit_V1_StatusRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Moby_Buildkit_V1_StatusResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Moby_Buildkit_V1_StatusResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.serverStreaming(
+                request: request,
+                descriptor: Moby_Buildkit_V1_Control.Method.Status.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
         /// Call the "ListenBuildHistory" method.
         ///
         /// - Parameters:
@@ -124,6 +185,29 @@ extension Moby_Buildkit_V1_Control {
 // Helpers providing default arguments to 'ClientProtocol' methods.
 @available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
 extension Moby_Buildkit_V1_Control.ClientProtocol {
+    /// Call the "Status" method.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Moby_Buildkit_V1_StatusRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response, the result of which is
+    ///       returned to the caller. Returning from the closure will cancel the RPC if it
+    ///       hasn't already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func status<Result>(
+        request: GRPCCore.ClientRequest<Moby_Buildkit_V1_StatusRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Moby_Buildkit_V1_StatusResponse>) async throws -> Result
+    ) async throws -> Result where Result: Sendable {
+        try await self.status(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Moby_Buildkit_V1_StatusRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Moby_Buildkit_V1_StatusResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
     /// Call the "ListenBuildHistory" method.
     ///
     /// - Parameters:
@@ -151,6 +235,33 @@ extension Moby_Buildkit_V1_Control.ClientProtocol {
 // Helpers providing sugared APIs for 'ClientProtocol' methods.
 @available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
 extension Moby_Buildkit_V1_Control.ClientProtocol {
+    /// Call the "Status" method.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response, the result of which is
+    ///       returned to the caller. Returning from the closure will cancel the RPC if it
+    ///       hasn't already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func status<Result>(
+        _ message: Moby_Buildkit_V1_StatusRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Moby_Buildkit_V1_StatusResponse>) async throws -> Result
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Moby_Buildkit_V1_StatusRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.status(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
     /// Call the "ListenBuildHistory" method.
     ///
     /// - Parameters:

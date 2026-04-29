@@ -5,7 +5,39 @@ package moby.buildkit.v1;
 import "google/protobuf/timestamp.proto";
 
 service Control {
+  rpc Status(StatusRequest) returns (stream StatusResponse);
   rpc ListenBuildHistory(BuildHistoryRequest) returns (stream BuildHistoryEvent);
+}
+
+message StatusRequest {
+  string Ref = 1;
+}
+
+message StatusResponse {
+  repeated Vertex vertexes = 1;
+  repeated VertexLog logs = 3;
+  repeated VertexWarning warnings = 4;
+}
+
+message Vertex {
+  string digest = 1;
+  string name = 3;
+  bool cached = 4;
+  string error = 7;
+}
+
+message VertexLog {
+  string vertex = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  int64 stream = 3;
+  bytes msg = 4;
+}
+
+message VertexWarning {
+  string vertex = 1;
+  bytes short = 3;
+  repeated bytes detail = 4;
+  string url = 5;
 }
 
 message BuildHistoryRequest {

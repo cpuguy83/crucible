@@ -8,6 +8,11 @@
 // For information on using the generated types, please see the documentation:
 //   https://github.com/apple/swift-protobuf/
 
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
+import Foundation
+#endif
 import SwiftProtobuf
 
 // If the compiler emits an error on this type, it is because this file
@@ -56,6 +61,97 @@ public enum Moby_Buildkit_V1_BuildHistoryEventType: SwiftProtobuf.Enum, Swift.Ca
     .deleted,
   ]
 
+}
+
+public struct Moby_Buildkit_V1_StatusRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var ref: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Moby_Buildkit_V1_StatusResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var vertexes: [Moby_Buildkit_V1_Vertex] = []
+
+  public var logs: [Moby_Buildkit_V1_VertexLog] = []
+
+  public var warnings: [Moby_Buildkit_V1_VertexWarning] = []
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Moby_Buildkit_V1_Vertex: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var digest: String = String()
+
+  public var name: String = String()
+
+  public var cached: Bool = false
+
+  public var error: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Moby_Buildkit_V1_VertexLog: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var vertex: String = String()
+
+  public var timestamp: SwiftProtobuf.Google_Protobuf_Timestamp {
+    get {_timestamp ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_timestamp = newValue}
+  }
+  /// Returns true if `timestamp` has been explicitly set.
+  public var hasTimestamp: Bool {self._timestamp != nil}
+  /// Clears the value of `timestamp`. Subsequent reads from it will return its default value.
+  public mutating func clearTimestamp() {self._timestamp = nil}
+
+  public var stream: Int64 = 0
+
+  public var msg: Data = Data()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _timestamp: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+}
+
+public struct Moby_Buildkit_V1_VertexWarning: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var vertex: String = String()
+
+  public var short: Data = Data()
+
+  public var detail: [Data] = []
+
+  public var url: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
 }
 
 public struct Moby_Buildkit_V1_BuildHistoryRequest: Sendable {
@@ -176,6 +272,215 @@ fileprivate let _protobuf_package = "moby.buildkit.v1"
 
 extension Moby_Buildkit_V1_BuildHistoryEventType: SwiftProtobuf._ProtoNameProviding {
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0STARTED\0\u{1}COMPLETE\0\u{1}DELETED\0")
+}
+
+extension Moby_Buildkit_V1_StatusRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".StatusRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}Ref\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.ref) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.ref.isEmpty {
+      try visitor.visitSingularStringField(value: self.ref, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Moby_Buildkit_V1_StatusRequest, rhs: Moby_Buildkit_V1_StatusRequest) -> Bool {
+    if lhs.ref != rhs.ref {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Moby_Buildkit_V1_StatusResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".StatusResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}vertexes\0\u{2}\u{2}logs\0\u{1}warnings\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeRepeatedMessageField(value: &self.vertexes) }()
+      case 3: try { try decoder.decodeRepeatedMessageField(value: &self.logs) }()
+      case 4: try { try decoder.decodeRepeatedMessageField(value: &self.warnings) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.vertexes.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.vertexes, fieldNumber: 1)
+    }
+    if !self.logs.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.logs, fieldNumber: 3)
+    }
+    if !self.warnings.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.warnings, fieldNumber: 4)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Moby_Buildkit_V1_StatusResponse, rhs: Moby_Buildkit_V1_StatusResponse) -> Bool {
+    if lhs.vertexes != rhs.vertexes {return false}
+    if lhs.logs != rhs.logs {return false}
+    if lhs.warnings != rhs.warnings {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Moby_Buildkit_V1_Vertex: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".Vertex"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}digest\0\u{2}\u{2}name\0\u{1}cached\0\u{2}\u{3}error\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.digest) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.cached) }()
+      case 7: try { try decoder.decodeSingularStringField(value: &self.error) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.digest.isEmpty {
+      try visitor.visitSingularStringField(value: self.digest, fieldNumber: 1)
+    }
+    if !self.name.isEmpty {
+      try visitor.visitSingularStringField(value: self.name, fieldNumber: 3)
+    }
+    if self.cached != false {
+      try visitor.visitSingularBoolField(value: self.cached, fieldNumber: 4)
+    }
+    if !self.error.isEmpty {
+      try visitor.visitSingularStringField(value: self.error, fieldNumber: 7)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Moby_Buildkit_V1_Vertex, rhs: Moby_Buildkit_V1_Vertex) -> Bool {
+    if lhs.digest != rhs.digest {return false}
+    if lhs.name != rhs.name {return false}
+    if lhs.cached != rhs.cached {return false}
+    if lhs.error != rhs.error {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Moby_Buildkit_V1_VertexLog: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".VertexLog"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}vertex\0\u{1}timestamp\0\u{1}stream\0\u{1}msg\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.vertex) }()
+      case 2: try { try decoder.decodeSingularMessageField(value: &self._timestamp) }()
+      case 3: try { try decoder.decodeSingularInt64Field(value: &self.stream) }()
+      case 4: try { try decoder.decodeSingularBytesField(value: &self.msg) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if !self.vertex.isEmpty {
+      try visitor.visitSingularStringField(value: self.vertex, fieldNumber: 1)
+    }
+    try { if let v = self._timestamp {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
+    } }()
+    if self.stream != 0 {
+      try visitor.visitSingularInt64Field(value: self.stream, fieldNumber: 3)
+    }
+    if !self.msg.isEmpty {
+      try visitor.visitSingularBytesField(value: self.msg, fieldNumber: 4)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Moby_Buildkit_V1_VertexLog, rhs: Moby_Buildkit_V1_VertexLog) -> Bool {
+    if lhs.vertex != rhs.vertex {return false}
+    if lhs._timestamp != rhs._timestamp {return false}
+    if lhs.stream != rhs.stream {return false}
+    if lhs.msg != rhs.msg {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Moby_Buildkit_V1_VertexWarning: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".VertexWarning"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}vertex\0\u{2}\u{2}short\0\u{1}detail\0\u{1}url\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.vertex) }()
+      case 3: try { try decoder.decodeSingularBytesField(value: &self.short) }()
+      case 4: try { try decoder.decodeRepeatedBytesField(value: &self.detail) }()
+      case 5: try { try decoder.decodeSingularStringField(value: &self.url) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.vertex.isEmpty {
+      try visitor.visitSingularStringField(value: self.vertex, fieldNumber: 1)
+    }
+    if !self.short.isEmpty {
+      try visitor.visitSingularBytesField(value: self.short, fieldNumber: 3)
+    }
+    if !self.detail.isEmpty {
+      try visitor.visitRepeatedBytesField(value: self.detail, fieldNumber: 4)
+    }
+    if !self.url.isEmpty {
+      try visitor.visitSingularStringField(value: self.url, fieldNumber: 5)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Moby_Buildkit_V1_VertexWarning, rhs: Moby_Buildkit_V1_VertexWarning) -> Bool {
+    if lhs.vertex != rhs.vertex {return false}
+    if lhs.short != rhs.short {return false}
+    if lhs.detail != rhs.detail {return false}
+    if lhs.url != rhs.url {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
 }
 
 extension Moby_Buildkit_V1_BuildHistoryRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {

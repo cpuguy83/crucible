@@ -4,6 +4,7 @@ import BuildKitCore
 struct SettingsWindowView: View {
     @ObservedObject var viewModel: TrayViewModel
     @State private var selection: SettingsSection = .general
+    @State private var selectedBuildID: String?
     private let hostLimits = HostResourceLimits.current()
 
     var body: some View {
@@ -395,6 +396,7 @@ struct SettingsWindowView: View {
                 }
             }
         }
+        .animation(.snappy(duration: 0.22), value: selectedBuildID)
     }
 
     private var resetView: some View {
@@ -669,93 +671,215 @@ struct SettingsWindowView: View {
     }
 
     private func activeBuildRow(_ build: ActiveBuild) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(build.target.map { "\(build.frontend) / \($0)" } ?? build.frontend)
-                    .font(.callout.weight(.medium))
-                Spacer()
-                Text("\(build.completedSteps)/\(build.totalSteps) steps")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
-            }
+        let id = buildSelectionID(kind: "active", ref: build.ref)
+        let isExpanded = selectedBuildID == id
+        let detail = BuildHistoryDetail(build)
 
-            if build.totalSteps > 0 {
-                ProgressView(value: Double(build.completedSteps), total: Double(build.totalSteps))
-                    .controlSize(.small)
-            }
+        return VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(build.target.map { "\(build.frontend) / \($0)" } ?? build.frontend)
+                        .font(.callout.weight(.medium))
+                    Spacer()
+                    Text("\(build.completedSteps)/\(build.totalSteps) steps")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
 
-            HStack(spacing: 12) {
-                Label("\(build.cachedSteps) cached", systemImage: "shippingbox")
-                Label("\(build.warnings) warnings", systemImage: build.warnings == 0 ? "checkmark.circle" : "exclamationmark.triangle")
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
+                if build.totalSteps > 0 {
+                    ProgressView(value: Double(build.completedSteps), total: Double(build.totalSteps))
+                        .controlSize(.small)
+                }
 
-            Text(build.ref)
-                .font(.caption.monospaced())
+                HStack(spacing: 12) {
+                    Label("\(build.cachedSteps) cached", systemImage: "shippingbox")
+                    Label("\(build.warnings) warnings", systemImage: build.warnings == 0 ? "checkmark.circle" : "exclamationmark.triangle")
+                }
+                .font(.caption)
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .textSelection(.enabled)
+
+                Text(build.ref)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .textSelection(.enabled)
+
+                if isExpanded {
+                    inlineBuildDetails(detail)
+                        .transition(.opacity)
+                }
         }
         .padding(10)
         .background(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color(nsColor: .controlBackgroundColor))
+                .fill(isExpanded ? Color.accentColor.opacity(0.16) : Color(nsColor: .controlBackgroundColor))
         )
+        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .onTapGesture {
+            toggleBuildDetails(id)
+        }
     }
 
     private func recentBuildRow(_ build: RecentBuild) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline) {
-                Label(
-                    build.succeeded ? "Completed" : "Failed",
-                    systemImage: build.succeeded ? "checkmark.circle" : "xmark.octagon"
-                )
-                .foregroundStyle(build.succeeded ? .green : .red)
-                .font(.caption.weight(.medium))
+        let id = buildSelectionID(kind: "recent", ref: build.ref)
+        let isExpanded = selectedBuildID == id
+        let detail = BuildHistoryDetail(build)
 
-                Text(build.target.map { "\(build.frontend) / \($0)" } ?? build.frontend)
-                    .font(.callout.weight(.medium))
-                Spacer()
-                Text(build.completedAt.map { Self.relativeDateFormatter.localizedString(for: $0, relativeTo: Date()) } ?? "unknown time")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+        return VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline) {
+                    Label(
+                        build.succeeded ? "Completed" : "Failed",
+                        systemImage: build.succeeded ? "checkmark.circle" : "xmark.octagon"
+                    )
+                    .foregroundStyle(build.succeeded ? .green : .red)
+                    .font(.caption.weight(.medium))
 
-            HStack(spacing: 12) {
-                Label("\(build.completedSteps)/\(build.totalSteps) steps", systemImage: "checklist")
-                Label("\(build.cachedSteps) cached", systemImage: "shippingbox")
-                Label("\(build.warnings) warnings", systemImage: build.warnings == 0 ? "checkmark.circle" : "exclamationmark.triangle")
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
+                    Text(build.target.map { "\(build.frontend) / \($0)" } ?? build.frontend)
+                        .font(.callout.weight(.medium))
+                    Spacer()
+                    Text(build.completedAt.map { Self.relativeDateFormatter.localizedString(for: $0, relativeTo: Date()) } ?? "unknown time")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
 
-            if let errorMessage = build.errorMessage {
-                Text(errorMessage)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .lineLimit(2)
-                    .textSelection(.enabled)
-            }
-
-            Text(build.ref)
-                .font(.caption.monospaced())
+                HStack(spacing: 12) {
+                    Label("\(build.completedSteps)/\(build.totalSteps) steps", systemImage: "checklist")
+                    Label("\(build.cachedSteps) cached", systemImage: "shippingbox")
+                    Label("\(build.warnings) warnings", systemImage: build.warnings == 0 ? "checkmark.circle" : "exclamationmark.triangle")
+                }
+                .font(.caption)
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .textSelection(.enabled)
+
+                if let errorMessage = build.errorMessage {
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .lineLimit(2)
+                        .textSelection(.enabled)
+                }
+
+                Text(build.ref)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .textSelection(.enabled)
+
+                if isExpanded {
+                    inlineBuildDetails(detail)
+                        .transition(.opacity)
+                }
         }
         .padding(10)
         .background(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color(nsColor: .controlBackgroundColor))
+                .fill(isExpanded ? Color.accentColor.opacity(0.16) : Color(nsColor: .controlBackgroundColor))
         )
+        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .onTapGesture {
+            toggleBuildDetails(id)
+        }
+    }
+
+    private func inlineBuildDetails(_ detail: BuildHistoryDetail) -> some View {
+            VStack(alignment: .leading, spacing: 10) {
+                Divider()
+
+                HStack {
+                    Text("Build Details")
+                        .font(.callout.weight(.medium))
+                    Spacer()
+                    Button("Copy Details") {
+                        copy(detail.debugText)
+                    }
+                    Button("Copy Ref") {
+                        copy(detail.ref)
+                    }
+                    Button("View Build Logs") {
+                        viewModel.openBuildLogsWindow(ref: detail.ref)
+                    }
+                }
+
+                detailRow("Ref", detail.ref)
+                detailRow("Kind", detail.kind)
+                detailRow("Frontend", detail.frontend)
+                detailRow("Target", detail.target ?? "none")
+                detailRow("Steps", "\(detail.completedSteps)/\(detail.totalSteps)")
+                detailRow("Cached", "\(detail.cachedSteps)")
+                detailRow("Warnings", "\(detail.warnings)")
+                if let createdAt = detail.createdAt {
+                    detailRow("Created", Self.absoluteDateFormatter.string(from: createdAt))
+                }
+                if let completedAt = detail.completedAt {
+                    detailRow("Completed", Self.absoluteDateFormatter.string(from: completedAt))
+                }
+                if let errorCode = detail.errorCode {
+                    detailRow("Error Code", "\(errorCode)")
+                }
+                if let errorMessage = detail.errorMessage {
+                    detailRow("Error", errorMessage)
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Frontend Attributes")
+                        .font(.callout.weight(.medium))
+                    if detail.frontendAttrs.isEmpty {
+                        Text("none")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text(detail.frontendAttrsText)
+                            .font(.caption.monospaced())
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(8)
+                            .background(Color(nsColor: .textBackgroundColor))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                }
+            }
+            .clipped()
+    }
+
+    private func detailRow(_ label: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(label)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+                .frame(width: 110, alignment: .leading)
+            Text(value)
+                .font(.caption.monospaced())
+                .textSelection(.enabled)
+            Spacer()
+        }
+    }
+
+    private func toggleBuildDetails(_ id: String) {
+        withAnimation(.snappy(duration: 0.22)) {
+            selectedBuildID = selectedBuildID == id ? nil : id
+        }
+    }
+
+    private func buildSelectionID(kind: String, ref: String) -> String {
+        "\(kind):\(ref)"
     }
 
     private static let relativeDateFormatter: RelativeDateTimeFormatter = {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .short
+        return formatter
+    }()
+
+    private static let absoluteDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .medium
         return formatter
     }()
 
@@ -853,5 +977,92 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
         case .reset: "arrow.counterclockwise"
         case .diagnostics: "stethoscope"
         }
+    }
+}
+
+private struct BuildHistoryDetail {
+    var ref: String
+    var kind: String
+    var frontend: String
+    var target: String?
+    var completedSteps: Int
+    var totalSteps: Int
+    var cachedSteps: Int
+    var warnings: Int
+    var createdAt: Date?
+    var completedAt: Date?
+    var errorCode: Int?
+    var errorMessage: String?
+    var frontendAttrs: [String: String]
+
+    init(_ build: ActiveBuild) {
+        self.ref = build.ref
+        self.kind = "Active"
+        self.frontend = build.frontend
+        self.target = build.target
+        self.completedSteps = build.completedSteps
+        self.totalSteps = build.totalSteps
+        self.cachedSteps = build.cachedSteps
+        self.warnings = build.warnings
+        self.createdAt = nil
+        self.completedAt = nil
+        self.errorCode = nil
+        self.errorMessage = nil
+        self.frontendAttrs = build.frontendAttrs
+    }
+
+    init(_ build: RecentBuild) {
+        self.ref = build.ref
+        self.kind = build.succeeded ? "Recent completed" : "Recent failed"
+        self.frontend = build.frontend
+        self.target = build.target
+        self.completedSteps = build.completedSteps
+        self.totalSteps = build.totalSteps
+        self.cachedSteps = build.cachedSteps
+        self.warnings = build.warnings
+        self.createdAt = build.createdAt
+        self.completedAt = build.completedAt
+        self.errorCode = build.errorCode
+        self.errorMessage = build.errorMessage
+        self.frontendAttrs = build.frontendAttrs
+    }
+
+    var title: String {
+        target.map { "\(frontend) / \($0)" } ?? frontend
+    }
+
+    var frontendAttrsText: String {
+        frontendAttrs
+            .sorted { $0.key < $1.key }
+            .map { "\($0.key)=\($0.value)" }
+            .joined(separator: "\n")
+    }
+
+    var debugText: String {
+        var lines = [
+            "ref=\(ref)",
+            "kind=\(kind)",
+            "frontend=\(frontend)",
+            "target=\(target ?? "")",
+            "completedSteps=\(completedSteps)",
+            "totalSteps=\(totalSteps)",
+            "cachedSteps=\(cachedSteps)",
+            "warnings=\(warnings)",
+        ]
+        if let createdAt {
+            lines.append("createdAt=\(createdAt.ISO8601Format())")
+        }
+        if let completedAt {
+            lines.append("completedAt=\(completedAt.ISO8601Format())")
+        }
+        if let errorCode {
+            lines.append("errorCode=\(errorCode)")
+        }
+        if let errorMessage {
+            lines.append("errorMessage=\(errorMessage)")
+        }
+        lines.append("frontendAttrs:")
+        lines.append(frontendAttrsText.isEmpty ? "  none" : frontendAttrsText.split(separator: "\n").map { "  \($0)" }.joined(separator: "\n"))
+        return lines.joined(separator: "\n")
     }
 }

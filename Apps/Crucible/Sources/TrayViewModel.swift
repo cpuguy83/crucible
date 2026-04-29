@@ -33,6 +33,7 @@ final class TrayViewModel: ObservableObject {
     private var activeBuildRefreshTask: Task<Void, Never>?
     private var subscribedToBackend = false
     private var logWindowController: LogWindowController?
+    private var buildLogWindowController: LogWindowController?
     private var settingsWindowController: SettingsWindowController?
 
     init() {
@@ -414,6 +415,41 @@ final class TrayViewModel: ObservableObject {
             }
         }
         logWindowController?.show()
+    }
+
+    func openBuildLogsWindow(ref: String) {
+        guard let endpoint else {
+            logStore.append(source: .supervisor, level: .warning, "build logs unavailable: BuildKit is not running")
+            return
+        }
+
+        let store = LogStore()
+        store.append(source: .buildkitd, level: .info, "Loading logs for build \(ref)")
+        buildLogWindowController = LogWindowController(title: "Build Logs", store: store) { [weak self] in
+            self?.buildLogWindowController = nil
+        }
+        buildLogWindowController?.show()
+
+        Task {
+            do {
+                let lines = try await BuildHistoryClient(socketPath: endpoint.socketPath).buildLogs(ref: ref)
+                await MainActor.run {
+                    store.clear()
+                    if lines.isEmpty {
+                        store.append(source: .buildkitd, level: .info, "No build logs were returned for \(ref)")
+                    } else {
+                        for line in lines {
+                            store.append(LogEvent(timestamp: line.timestamp ?? Date(), source: .buildkitd, message: line.message))
+                        }
+                    }
+                }
+            } catch {
+                let msg = buildKitUserMessage(for: error)
+                await MainActor.run {
+                    store.append(source: .buildkitd, level: .error, "Failed to load build logs: \(msg)")
+                }
+            }
+        }
     }
 
     func openSettingsWindow() {

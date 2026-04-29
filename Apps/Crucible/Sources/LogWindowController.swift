@@ -6,7 +6,7 @@ final class LogWindowController: NSWindowController, NSWindowDelegate {
     private let store: LogStore
     private let onClose: () -> Void
 
-    init(store: LogStore, onClose: @escaping () -> Void) {
+    init(title: String = "Crucible Logs", store: LogStore, onClose: @escaping () -> Void) {
         self.store = store
         self.onClose = onClose
         let view = LogsWindowView(store: store)
@@ -16,7 +16,7 @@ final class LogWindowController: NSWindowController, NSWindowDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = "Crucible Logs"
+        window.title = title
         window.contentView = NSHostingView(rootView: view)
         window.isReleasedWhenClosed = false
         super.init(window: window)

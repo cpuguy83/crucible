@@ -130,6 +130,7 @@ struct SettingsValidatorTests {
         #expect(build.totalSteps == 5)
         #expect(build.cachedSteps == 2)
         #expect(build.warnings == 1)
+        #expect(build.frontendAttrs["target"] == "release")
     }
 
     @Test func recentBuildMapsBuildHistoryRecord() {
@@ -141,6 +142,7 @@ struct SettingsValidatorTests {
         record.numTotalSteps = 4
         record.numCachedSteps = 1
         record.numWarnings = 2
+        record.error.code = 2
         record.error.message = "compile failed"
 
         let build = RecentBuild(record: record)
@@ -153,6 +155,8 @@ struct SettingsValidatorTests {
         #expect(build.cachedSteps == 1)
         #expect(build.warnings == 2)
         #expect(build.errorMessage == "compile failed")
+        #expect(build.errorCode == 2)
+        #expect(build.frontendAttrs["target"] == "debug")
         #expect(!build.succeeded)
     }
 

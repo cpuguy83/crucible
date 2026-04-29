@@ -11,6 +11,7 @@ public struct ActiveBuild: Equatable, Sendable {
     public var totalSteps: Int
     public var cachedSteps: Int
     public var warnings: Int
+    public var frontendAttrs: [String: String]
 
     public init(
         ref: String,
@@ -19,7 +20,8 @@ public struct ActiveBuild: Equatable, Sendable {
         completedSteps: Int,
         totalSteps: Int,
         cachedSteps: Int,
-        warnings: Int
+        warnings: Int,
+        frontendAttrs: [String: String] = [:]
     ) {
         self.ref = ref
         self.frontend = frontend
@@ -28,6 +30,7 @@ public struct ActiveBuild: Equatable, Sendable {
         self.totalSteps = totalSteps
         self.cachedSteps = cachedSteps
         self.warnings = warnings
+        self.frontendAttrs = frontendAttrs
     }
 }
 
@@ -69,6 +72,8 @@ public struct RecentBuild: Equatable, Sendable, Identifiable {
     public var createdAt: Date?
     public var completedAt: Date?
     public var errorMessage: String?
+    public var errorCode: Int?
+    public var frontendAttrs: [String: String]
 
     public init(
         ref: String,
@@ -80,7 +85,9 @@ public struct RecentBuild: Equatable, Sendable, Identifiable {
         warnings: Int,
         createdAt: Date?,
         completedAt: Date?,
-        errorMessage: String?
+        errorMessage: String?,
+        errorCode: Int? = nil,
+        frontendAttrs: [String: String] = [:]
     ) {
         self.ref = ref
         self.frontend = frontend
@@ -92,6 +99,8 @@ public struct RecentBuild: Equatable, Sendable, Identifiable {
         self.createdAt = createdAt
         self.completedAt = completedAt
         self.errorMessage = errorMessage
+        self.errorCode = errorCode
+        self.frontendAttrs = frontendAttrs
     }
 
     public var succeeded: Bool { errorMessage == nil }
@@ -104,6 +113,16 @@ public struct BuildHistorySnapshot: Equatable, Sendable {
     public init(active: [ActiveBuild], recent: [RecentBuild]) {
         self.active = active
         self.recent = recent
+    }
+}
+
+public struct BuildLogLine: Equatable, Sendable {
+    public var timestamp: Date?
+    public var message: String
+
+    public init(timestamp: Date?, message: String) {
+        self.timestamp = timestamp
+        self.message = message
     }
 }
 
@@ -255,6 +274,37 @@ public struct BuildHistoryClient: Sendable {
             }
         }
     }
+
+    @available(macOS 15.0, *)
+    public func buildLogs(ref: String) async throws -> [BuildLogLine] {
+        let transport = try HTTP2ClientTransport.Posix(
+            target: .unixDomainSocket(path: socketPath),
+            transportSecurity: .plaintext
+        )
+
+        return try await withGRPCClient(transport: transport) { client in
+            var request = Moby_Buildkit_V1_StatusRequest()
+            request.ref = ref
+
+            let control = Moby_Buildkit_V1_Control.Client(wrapping: client)
+            return try await control.status(request) { response in
+                var lines: [BuildLogLine] = []
+                for try await update in response.messages {
+                    for log in update.logs {
+                        let text = String(decoding: log.msg, as: UTF8.self).trimmingCharacters(in: .newlines)
+                        guard !text.isEmpty else { continue }
+                        lines.append(BuildLogLine(timestamp: log.hasTimestamp ? log.timestamp.date : nil, message: text))
+                    }
+                    for warning in update.warnings {
+                        let text = String(decoding: warning.short, as: UTF8.self).trimmingCharacters(in: .newlines)
+                        guard !text.isEmpty else { continue }
+                        lines.append(BuildLogLine(timestamp: nil, message: "warning: \(text)"))
+                    }
+                }
+                return lines
+            }
+        }
+    }
 }
 
 private func apply(_ event: Moby_Buildkit_V1_BuildHistoryEvent, to buildsByRef: inout [String: ActiveBuild]) {
@@ -305,7 +355,8 @@ extension ActiveBuild {
             completedSteps: Int(record.numCompletedSteps),
             totalSteps: Int(record.numTotalSteps),
             cachedSteps: Int(record.numCachedSteps),
-            warnings: Int(record.numWarnings)
+            warnings: Int(record.numWarnings),
+            frontendAttrs: record.frontendAttrs
         )
     }
 }
@@ -322,7 +373,9 @@ extension RecentBuild {
             warnings: Int(record.numWarnings),
             createdAt: record.hasCreatedAt ? record.createdAt.date : nil,
             completedAt: record.hasCompletedAt ? record.completedAt.date : nil,
-            errorMessage: record.hasError && !record.error.message.isEmpty ? record.error.message : nil
+            errorMessage: record.hasError && !record.error.message.isEmpty ? record.error.message : nil,
+            errorCode: record.hasError ? Int(record.error.code) : nil,
+            frontendAttrs: record.frontendAttrs
         )
     }
 }
