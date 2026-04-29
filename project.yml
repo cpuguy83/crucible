@@ -34,6 +34,8 @@ targets:
         buildPhase: none
     info:
       path: Apps/Crucible/Resources/Info.plist
+      properties:
+        LSUIElement: true
     entitlements:
       path: Apps/Crucible/Resources/Crucible.entitlements
       properties:
