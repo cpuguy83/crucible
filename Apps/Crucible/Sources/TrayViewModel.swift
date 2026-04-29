@@ -117,7 +117,7 @@ final class TrayViewModel: ObservableObject {
         switch activeBuildsStatus {
         case .ready(let count):
             return count == 0 ? "Active Builds: none" : "Active Builds: \(count)"
-        case .checking:
+        case .checking, .reconnecting:
             return "Active Builds: checking..."
         case .unavailable:
             return "Active Builds: unavailable"
@@ -547,31 +547,53 @@ final class TrayViewModel: ObservableObject {
             return
         }
 
-        refreshActiveBuilds(endpoint: endpoint, logResult: true)
+        activeBuildRefreshTask?.cancel()
+        activeBuildRefreshTask = nil
+        activeBuilds = []
+        subscribeActiveBuilds(endpoint: endpoint, logSubscription: true)
     }
 
-    private func refreshActiveBuilds(endpoint: BuildKitEndpoint, logResult: Bool) {
+    private func subscribeActiveBuilds(endpoint: BuildKitEndpoint, logSubscription: Bool) {
         activeBuildsStatus = .checking
-        Task {
-            do {
-                let builds = try await BuildHistoryClient(socketPath: endpoint.socketPath).activeBuilds()
-                await MainActor.run {
-                    self.activeBuilds = builds
-                    self.activeBuildsStatus = .ready(builds.count)
-                    if logResult {
-                        self.logStore.append(source: .supervisor, level: .info, "active builds: \(self.activeBuildsStatusText)")
+        activeBuildRefreshTask = Task { [weak self] in
+            var retryDelaySeconds: UInt64 = 1
+            while !Task.isCancelled {
+                do {
+                    try await BuildHistoryClient(socketPath: endpoint.socketPath).watchActiveBuilds { builds in
+                        await MainActor.run {
+                            guard let self else { return }
+                            self.activeBuilds = builds
+                            self.activeBuildsStatus = .ready(builds.count)
+                        }
                     }
-                }
-            } catch {
-                let msg = buildKitUserMessage(for: error)
-                await MainActor.run {
-                    self.activeBuilds = []
-                    self.activeBuildsStatus = .unavailable(msg)
-                    if logResult {
+                    retryDelaySeconds = 1
+                } catch {
+                    if Task.isCancelled { return }
+                    let msg = buildKitUserMessage(for: error)
+                    if isTransientActiveBuildError(error) {
+                        await MainActor.run {
+                            guard let self else { return }
+                            self.activeBuildsStatus = .reconnecting(msg)
+                        }
+                        try? await Task.sleep(for: .seconds(retryDelaySeconds))
+                        retryDelaySeconds = min(retryDelaySeconds * 2, 10)
+                        continue
+                    }
+
+                    await MainActor.run {
+                        guard let self else { return }
+                        self.activeBuilds = []
+                        self.activeBuildsStatus = .unavailable(msg)
+                        self.activeBuildRefreshTask = nil
                         self.logStore.append(source: .supervisor, level: .warning, "active builds unavailable: \(msg)")
                     }
+                    return
                 }
             }
+        }
+
+        if logSubscription {
+            logStore.append(source: .supervisor, level: .info, "subscribed to active builds")
         }
     }
 
@@ -828,17 +850,7 @@ final class TrayViewModel: ObservableObject {
         }
 
         if activeBuildRefreshTask != nil { return }
-        refreshActiveBuilds(endpoint: endpoint, logResult: false)
-        activeBuildRefreshTask = Task { [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(5))
-                if Task.isCancelled { break }
-                await MainActor.run {
-                    guard let self, let endpoint = self.endpoint else { return }
-                    self.refreshActiveBuilds(endpoint: endpoint, logResult: false)
-                }
-            }
-        }
+        subscribeActiveBuilds(endpoint: endpoint, logSubscription: false)
     }
 
     private func consumeProgress(_ stream: AsyncStream<BuildKitProgress>) async {

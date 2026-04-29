@@ -1,4 +1,5 @@
 import Foundation
+import GRPCCore
 import Testing
 @testable import BuildKitCore
 
@@ -134,10 +135,17 @@ struct SettingsValidatorTests {
     @Test func activeBuildStatusDisplayText() {
         #expect(ActiveBuildStatus.notChecked.displayText == "Not checked")
         #expect(ActiveBuildStatus.checking.displayText == "Checking...")
+        #expect(ActiveBuildStatus.reconnecting("connection refused").displayText == "Reconnecting: connection refused")
         #expect(ActiveBuildStatus.stopped.displayText == "BuildKit is not running")
         #expect(ActiveBuildStatus.ready(0).displayText == "No active builds")
         #expect(ActiveBuildStatus.ready(2).displayText == "2 active")
         #expect(ActiveBuildStatus.unavailable("socket closed").displayText == "Unavailable: socket closed")
+    }
+
+    @Test func unavailableActiveBuildErrorsAreTransient() {
+        #expect(isTransientActiveBuildError(RPCError(code: .unavailable, message: "starting")))
+        #expect(!isTransientActiveBuildError(RPCError(code: .unimplemented, message: "missing")))
+        #expect(!isTransientActiveBuildError(BuildKitBackendError.daemonStartFailed("boom")))
     }
 
     @Test func emptyImageReferenceRejected() {
