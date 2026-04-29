@@ -30,7 +30,6 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         window?.center()
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
-        NSApp.activate()
     }
 
     func windowWillClose(_ notification: Notification) {

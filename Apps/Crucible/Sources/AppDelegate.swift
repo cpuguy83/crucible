@@ -5,6 +5,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     static weak var viewModel: TrayViewModel?
     private var shouldTerminate = false
 
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApplication.shared.setActivationPolicy(.accessory)
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard !shouldTerminate, let viewModel = Self.viewModel else { return .terminateNow }
 

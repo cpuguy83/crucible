@@ -10,6 +10,8 @@ struct CrucibleApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     init() {
+        NSApplication.shared.setActivationPolicy(.accessory)
+
         let vm = TrayViewModel()
         _viewModel = StateObject(wrappedValue: vm)
         AppDelegate.viewModel = vm
