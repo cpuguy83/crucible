@@ -186,6 +186,31 @@ struct SettingsValidatorTests {
         #expect(!isTransientActiveBuildError(BuildKitBackendError.daemonStartFailed("boom")))
     }
 
+    @Test func buildStatusMapsToLogLines() {
+        var update = Moby_Buildkit_V1_StatusResponse()
+        var vertex = Moby_Buildkit_V1_Vertex()
+        vertex.name = "load build definition"
+        update.vertexes = [vertex]
+
+        var log = Moby_Buildkit_V1_VertexLog()
+        log.msg = Data("hello\n".utf8)
+        update.logs = [log]
+
+        var warning = Moby_Buildkit_V1_VertexWarning()
+        warning.short = Data("deprecated syntax".utf8)
+        warning.url = "https://example.invalid/warning"
+        update.warnings = [warning]
+
+        let lines = buildLogLines(from: update)
+
+        #expect(lines.map(\.kind) == [.vertex, .log, .warning])
+        #expect(lines.map(\.message) == [
+            "started: load build definition",
+            "hello",
+            "warning: deprecated syntax (https://example.invalid/warning)",
+        ])
+    }
+
     @Test func emptyImageReferenceRejected() {
         var s = BuildKitSettings()
         s.imageReference = ""

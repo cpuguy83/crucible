@@ -116,13 +116,22 @@ public struct BuildHistorySnapshot: Equatable, Sendable {
     }
 }
 
+public enum BuildLogEventKind: Equatable, Sendable {
+    case log
+    case vertex
+    case warning
+    case error
+}
+
 public struct BuildLogLine: Equatable, Sendable {
     public var timestamp: Date?
     public var message: String
+    public var kind: BuildLogEventKind
 
-    public init(timestamp: Date?, message: String) {
+    public init(timestamp: Date?, message: String, kind: BuildLogEventKind = .log) {
         self.timestamp = timestamp
         self.message = message
+        self.kind = kind
     }
 }
 
@@ -290,21 +299,78 @@ public struct BuildHistoryClient: Sendable {
             return try await control.status(request) { response in
                 var lines: [BuildLogLine] = []
                 for try await update in response.messages {
-                    for log in update.logs {
-                        let text = String(decoding: log.msg, as: UTF8.self).trimmingCharacters(in: .newlines)
-                        guard !text.isEmpty else { continue }
-                        lines.append(BuildLogLine(timestamp: log.hasTimestamp ? log.timestamp.date : nil, message: text))
-                    }
-                    for warning in update.warnings {
-                        let text = String(decoding: warning.short, as: UTF8.self).trimmingCharacters(in: .newlines)
-                        guard !text.isEmpty else { continue }
-                        lines.append(BuildLogLine(timestamp: nil, message: "warning: \(text)"))
-                    }
+                    lines.append(contentsOf: buildLogLines(from: update))
                 }
                 return lines
             }
         }
     }
+
+    @available(macOS 15.0, *)
+    public func watchBuildLogs(
+        ref: String,
+        onUpdate: @Sendable @escaping ([BuildLogLine]) async -> Void
+    ) async throws {
+        let transport = try HTTP2ClientTransport.Posix(
+            target: .unixDomainSocket(path: socketPath),
+            transportSecurity: .plaintext
+        )
+
+        try await withGRPCClient(transport: transport) { client in
+            var request = Moby_Buildkit_V1_StatusRequest()
+            request.ref = ref
+
+            let control = Moby_Buildkit_V1_Control.Client(wrapping: client)
+            try await control.status(request) { response in
+                for try await update in response.messages {
+                    try Task.checkCancellation()
+                    let lines = buildLogLines(from: update)
+                    if !lines.isEmpty {
+                        await onUpdate(lines)
+                    }
+                }
+            }
+        }
+    }
+}
+
+func buildLogLines(from update: Moby_Buildkit_V1_StatusResponse) -> [BuildLogLine] {
+    var lines: [BuildLogLine] = []
+
+    for vertex in update.vertexes {
+        let name = vertex.name.isEmpty ? vertex.digest : vertex.name
+        guard !name.isEmpty else { continue }
+        if !vertex.error.isEmpty {
+            lines.append(BuildLogLine(timestamp: nil, message: "failed: \(name): \(vertex.error)", kind: .error))
+        } else if vertex.cached {
+            lines.append(BuildLogLine(timestamp: nil, message: "cached: \(name)", kind: .vertex))
+        } else {
+            lines.append(BuildLogLine(timestamp: nil, message: "started: \(name)", kind: .vertex))
+        }
+    }
+
+    for log in update.logs {
+        let text = String(decoding: log.msg, as: UTF8.self).trimmingCharacters(in: .newlines)
+        guard !text.isEmpty else { continue }
+        lines.append(BuildLogLine(timestamp: log.hasTimestamp ? log.timestamp.date : nil, message: text, kind: .log))
+    }
+
+    for warning in update.warnings {
+        let short = String(decoding: warning.short, as: UTF8.self).trimmingCharacters(in: .newlines)
+        guard !short.isEmpty else { continue }
+        var message = "warning: \(short)"
+        if !warning.url.isEmpty {
+            message += " (\(warning.url))"
+        }
+        lines.append(BuildLogLine(timestamp: nil, message: message, kind: .warning))
+        for detail in warning.detail {
+            let text = String(decoding: detail, as: UTF8.self).trimmingCharacters(in: .newlines)
+            guard !text.isEmpty else { continue }
+            lines.append(BuildLogLine(timestamp: nil, message: "warning detail: \(text)", kind: .warning))
+        }
+    }
+
+    return lines
 }
 
 private func apply(_ event: Moby_Buildkit_V1_BuildHistoryEvent, to buildsByRef: inout [String: ActiveBuild]) {

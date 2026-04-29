@@ -34,6 +34,7 @@ final class TrayViewModel: ObservableObject {
     private var subscribedToBackend = false
     private var logWindowController: LogWindowController?
     private var buildLogWindowController: LogWindowController?
+    private var buildLogTask: Task<Void, Never>?
     private var settingsWindowController: SettingsWindowController?
 
     init() {
@@ -425,28 +426,58 @@ final class TrayViewModel: ObservableObject {
 
         let store = LogStore()
         store.append(source: .buildkitd, level: .info, "Loading logs for build \(ref)")
+        buildLogTask?.cancel()
         buildLogWindowController = LogWindowController(title: "Build Logs", store: store) { [weak self] in
+            self?.buildLogTask?.cancel()
+            self?.buildLogTask = nil
             self?.buildLogWindowController = nil
         }
         buildLogWindowController?.show()
 
-        Task {
-            do {
-                let lines = try await BuildHistoryClient(socketPath: endpoint.socketPath).buildLogs(ref: ref)
-                await MainActor.run {
-                    store.clear()
-                    if lines.isEmpty {
-                        store.append(source: .buildkitd, level: .info, "No build logs were returned for \(ref)")
-                    } else {
-                        for line in lines {
-                            store.append(LogEvent(timestamp: line.timestamp ?? Date(), source: .buildkitd, message: line.message))
+        buildLogTask = Task {
+            var sawLines = false
+            var retryDelaySeconds: UInt64 = 1
+            while !Task.isCancelled {
+                do {
+                    try await BuildHistoryClient(socketPath: endpoint.socketPath).watchBuildLogs(ref: ref) { lines in
+                        await MainActor.run {
+                            if !sawLines {
+                                store.clear()
+                                sawLines = true
+                            }
+                            for line in lines {
+                                store.append(LogEvent(
+                                    timestamp: line.timestamp ?? Date(),
+                                    source: .buildkitd,
+                                    level: Self.logLevel(for: line.kind),
+                                    message: line.message
+                                ))
+                            }
                         }
                     }
-                }
-            } catch {
-                let msg = buildKitUserMessage(for: error)
-                await MainActor.run {
-                    store.append(source: .buildkitd, level: .error, "Failed to load build logs: \(msg)")
+                    if !sawLines {
+                        await MainActor.run {
+                            store.clear()
+                            store.append(source: .buildkitd, level: .info, "No build logs were returned for \(ref)")
+                        }
+                    }
+                    return
+                } catch {
+                    if Task.isCancelled { return }
+                    let msg = buildKitUserMessage(for: error)
+                    if isTransientActiveBuildError(error) {
+                        await MainActor.run {
+                            store.append(source: .buildkitd, level: .warning, "Build logs unavailable, retrying: \(msg)")
+                        }
+                        try? await Task.sleep(for: .seconds(retryDelaySeconds))
+                        retryDelaySeconds = min(retryDelaySeconds * 2, 10)
+                        continue
+                    }
+
+                    await MainActor.run {
+                        store.append(source: .buildkitd, level: .error, "Failed to load build logs: \(msg)")
+                    }
+                    return
                 }
             }
         }
@@ -993,5 +1024,18 @@ final class TrayViewModel: ObservableObject {
         if line.contains("level=debug") { return .debug }
         if line.contains("level=info") { return .info }
         return nil
+    }
+
+    private static func logLevel(for kind: BuildLogEventKind) -> LogLevel? {
+        switch kind {
+        case .log:
+            return nil
+        case .vertex:
+            return .info
+        case .warning:
+            return .warning
+        case .error:
+            return .error
+        }
     }
 }
