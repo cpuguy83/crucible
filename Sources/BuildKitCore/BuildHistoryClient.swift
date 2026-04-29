@@ -74,6 +74,7 @@ public struct RecentBuild: Equatable, Sendable, Identifiable {
     public var errorMessage: String?
     public var errorCode: Int?
     public var frontendAttrs: [String: String]
+    public var trace: BuildHistoryDescriptor?
 
     public init(
         ref: String,
@@ -87,7 +88,8 @@ public struct RecentBuild: Equatable, Sendable, Identifiable {
         completedAt: Date?,
         errorMessage: String?,
         errorCode: Int? = nil,
-        frontendAttrs: [String: String] = [:]
+        frontendAttrs: [String: String] = [:],
+        trace: BuildHistoryDescriptor? = nil
     ) {
         self.ref = ref
         self.frontend = frontend
@@ -101,6 +103,7 @@ public struct RecentBuild: Equatable, Sendable, Identifiable {
         self.errorMessage = errorMessage
         self.errorCode = errorCode
         self.frontendAttrs = frontendAttrs
+        self.trace = trace
     }
 
     public var succeeded: Bool { errorMessage == nil }
@@ -113,6 +116,20 @@ public struct BuildHistorySnapshot: Equatable, Sendable {
     public init(active: [ActiveBuild], recent: [RecentBuild]) {
         self.active = active
         self.recent = recent
+    }
+}
+
+public struct BuildHistoryDescriptor: Equatable, Sendable {
+    public var mediaType: String
+    public var digest: String
+    public var size: Int64
+    public var annotations: [String: String]
+
+    public init(mediaType: String, digest: String, size: Int64, annotations: [String: String]) {
+        self.mediaType = mediaType
+        self.digest = digest
+        self.size = size
+        self.annotations = annotations
     }
 }
 
@@ -332,6 +349,29 @@ public struct BuildHistoryClient: Sendable {
             }
         }
     }
+
+    @available(macOS 15.0, *)
+    public func buildTrace(_ descriptor: BuildHistoryDescriptor) async throws -> Data {
+        let transport = try HTTP2ClientTransport.Posix(
+            target: .unixDomainSocket(path: socketPath),
+            transportSecurity: .plaintext
+        )
+
+        return try await withGRPCClient(transport: transport) { client in
+            var request = Containerd_Services_Content_V1_ReadContentRequest()
+            request.digest = descriptor.digest
+            request.size = descriptor.size
+
+            let content = Containerd_Services_Content_V1_Content.Client(wrapping: client)
+            return try await content.read(request) { response in
+                var data = Data()
+                for try await chunk in response.messages {
+                    data.append(chunk.data)
+                }
+                return data
+            }
+        }
+    }
 }
 
 func buildLogLines(from update: Moby_Buildkit_V1_StatusResponse) -> [BuildLogLine] {
@@ -441,7 +481,19 @@ extension RecentBuild {
             completedAt: record.hasCompletedAt ? record.completedAt.date : nil,
             errorMessage: record.hasError && !record.error.message.isEmpty ? record.error.message : nil,
             errorCode: record.hasError ? Int(record.error.code) : nil,
-            frontendAttrs: record.frontendAttrs
+            frontendAttrs: record.frontendAttrs,
+            trace: record.hasTrace ? BuildHistoryDescriptor(record.trace) : nil
+        )
+    }
+}
+
+extension BuildHistoryDescriptor {
+    init(_ descriptor: Moby_Buildkit_V1_Descriptor) {
+        self.init(
+            mediaType: descriptor.mediaType,
+            digest: descriptor.digest,
+            size: descriptor.size,
+            annotations: descriptor.annotations
         )
     }
 }

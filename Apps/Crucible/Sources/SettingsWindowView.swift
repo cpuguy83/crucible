@@ -804,6 +804,11 @@ struct SettingsWindowView: View {
                     Button("View Build Logs") {
                         viewModel.openBuildLogsWindow(ref: detail.ref)
                     }
+                    if let trace = detail.trace {
+                        Button("Export Trace") {
+                            viewModel.exportBuildTrace(trace, suggestedName: detail.ref)
+                        }
+                    }
                 }
 
                 detailRow("Ref", detail.ref)
@@ -824,6 +829,10 @@ struct SettingsWindowView: View {
                 }
                 if let errorMessage = detail.errorMessage {
                     detailRow("Error", errorMessage)
+                }
+                if let trace = detail.trace {
+                    detailRow("Trace", "\(trace.mediaType), \(Self.byteFormatter.string(fromByteCount: trace.size))")
+                    detailRow("Trace Digest", Self.shortDigest(trace.digest))
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
@@ -882,6 +891,18 @@ struct SettingsWindowView: View {
         formatter.timeStyle = .medium
         return formatter
     }()
+
+    private static let byteFormatter: ByteCountFormatter = {
+        let formatter = ByteCountFormatter()
+        formatter.allowedUnits = [.useBytes, .useKB, .useMB]
+        formatter.countStyle = .file
+        return formatter
+    }()
+
+    private static func shortDigest(_ digest: String) -> String {
+        guard digest.count > 28 else { return digest }
+        return "\(digest.prefix(19))...\(digest.suffix(8))"
+    }
 
     private func copy(_ text: String) {
         let pb = NSPasteboard.general
@@ -994,6 +1015,7 @@ private struct BuildHistoryDetail {
     var errorCode: Int?
     var errorMessage: String?
     var frontendAttrs: [String: String]
+    var trace: BuildHistoryDescriptor?
 
     init(_ build: ActiveBuild) {
         self.ref = build.ref
@@ -1009,6 +1031,7 @@ private struct BuildHistoryDetail {
         self.errorCode = nil
         self.errorMessage = nil
         self.frontendAttrs = build.frontendAttrs
+        self.trace = nil
     }
 
     init(_ build: RecentBuild) {
@@ -1025,6 +1048,7 @@ private struct BuildHistoryDetail {
         self.errorCode = build.errorCode
         self.errorMessage = build.errorMessage
         self.frontendAttrs = build.frontendAttrs
+        self.trace = build.trace
     }
 
     var title: String {
@@ -1060,6 +1084,11 @@ private struct BuildHistoryDetail {
         }
         if let errorMessage {
             lines.append("errorMessage=\(errorMessage)")
+        }
+        if let trace {
+            lines.append("traceMediaType=\(trace.mediaType)")
+            lines.append("traceDigest=\(trace.digest)")
+            lines.append("traceSize=\(trace.size)")
         }
         lines.append("frontendAttrs:")
         lines.append(frontendAttrsText.isEmpty ? "  none" : frontendAttrsText.split(separator: "\n").map { "  \($0)" }.joined(separator: "\n"))

@@ -66,6 +66,7 @@ message BuildHistoryRecord {
   BuildHistoryStatus error = 5;
   google.protobuf.Timestamp CreatedAt = 6;
   google.protobuf.Timestamp CompletedAt = 7;
+  Descriptor trace = 13;
   int32 numCachedSteps = 15;
   int32 numTotalSteps = 16;
   int32 numCompletedSteps = 17;
@@ -75,4 +76,11 @@ message BuildHistoryRecord {
 message BuildHistoryStatus {
   int32 code = 1;
   string message = 2;
+}
+
+message Descriptor {
+  string media_type = 1;
+  string digest = 2;
+  int64 size = 3;
+  map<string, string> annotations = 5;
 }

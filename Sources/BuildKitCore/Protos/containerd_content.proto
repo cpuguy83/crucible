@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package containerd.services.content.v1;
+
+service Content {
+  rpc Read(ReadContentRequest) returns (stream ReadContentResponse);
+}
+
+message ReadContentRequest {
+  string digest = 1;
+  int64 offset = 2;
+  int64 size = 3;
+}
+
+message ReadContentResponse {
+  int64 offset = 1;
+  bytes data = 2;
+}

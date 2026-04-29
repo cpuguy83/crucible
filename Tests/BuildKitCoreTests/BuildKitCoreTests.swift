@@ -144,6 +144,9 @@ struct SettingsValidatorTests {
         record.numWarnings = 2
         record.error.code = 2
         record.error.message = "compile failed"
+        record.trace.mediaType = "application/vnd.buildkit.otlp.json.v0"
+        record.trace.digest = "sha256:abc123"
+        record.trace.size = 42
 
         let build = RecentBuild(record: record)
 
@@ -157,6 +160,9 @@ struct SettingsValidatorTests {
         #expect(build.errorMessage == "compile failed")
         #expect(build.errorCode == 2)
         #expect(build.frontendAttrs["target"] == "debug")
+        #expect(build.trace?.mediaType == "application/vnd.buildkit.otlp.json.v0")
+        #expect(build.trace?.digest == "sha256:abc123")
+        #expect(build.trace?.size == 42)
         #expect(!build.succeeded)
     }
 

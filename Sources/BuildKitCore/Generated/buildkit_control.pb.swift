@@ -197,59 +197,87 @@ public struct Moby_Buildkit_V1_BuildHistoryEvent: Sendable {
   fileprivate var _record: Moby_Buildkit_V1_BuildHistoryRecord? = nil
 }
 
-public struct Moby_Buildkit_V1_BuildHistoryRecord: Sendable {
+public struct Moby_Buildkit_V1_BuildHistoryRecord: @unchecked Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var ref: String = String()
+  public var ref: String {
+    get {_storage._ref}
+    set {_uniqueStorage()._ref = newValue}
+  }
 
-  public var frontend: String = String()
+  public var frontend: String {
+    get {_storage._frontend}
+    set {_uniqueStorage()._frontend = newValue}
+  }
 
-  public var frontendAttrs: Dictionary<String,String> = [:]
+  public var frontendAttrs: Dictionary<String,String> {
+    get {_storage._frontendAttrs}
+    set {_uniqueStorage()._frontendAttrs = newValue}
+  }
 
   public var error: Moby_Buildkit_V1_BuildHistoryStatus {
-    get {_error ?? Moby_Buildkit_V1_BuildHistoryStatus()}
-    set {_error = newValue}
+    get {_storage._error ?? Moby_Buildkit_V1_BuildHistoryStatus()}
+    set {_uniqueStorage()._error = newValue}
   }
   /// Returns true if `error` has been explicitly set.
-  public var hasError: Bool {self._error != nil}
+  public var hasError: Bool {_storage._error != nil}
   /// Clears the value of `error`. Subsequent reads from it will return its default value.
-  public mutating func clearError() {self._error = nil}
+  public mutating func clearError() {_uniqueStorage()._error = nil}
 
   public var createdAt: SwiftProtobuf.Google_Protobuf_Timestamp {
-    get {_createdAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
-    set {_createdAt = newValue}
+    get {_storage._createdAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_uniqueStorage()._createdAt = newValue}
   }
   /// Returns true if `createdAt` has been explicitly set.
-  public var hasCreatedAt: Bool {self._createdAt != nil}
+  public var hasCreatedAt: Bool {_storage._createdAt != nil}
   /// Clears the value of `createdAt`. Subsequent reads from it will return its default value.
-  public mutating func clearCreatedAt() {self._createdAt = nil}
+  public mutating func clearCreatedAt() {_uniqueStorage()._createdAt = nil}
 
   public var completedAt: SwiftProtobuf.Google_Protobuf_Timestamp {
-    get {_completedAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
-    set {_completedAt = newValue}
+    get {_storage._completedAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_uniqueStorage()._completedAt = newValue}
   }
   /// Returns true if `completedAt` has been explicitly set.
-  public var hasCompletedAt: Bool {self._completedAt != nil}
+  public var hasCompletedAt: Bool {_storage._completedAt != nil}
   /// Clears the value of `completedAt`. Subsequent reads from it will return its default value.
-  public mutating func clearCompletedAt() {self._completedAt = nil}
+  public mutating func clearCompletedAt() {_uniqueStorage()._completedAt = nil}
 
-  public var numCachedSteps: Int32 = 0
+  public var trace: Moby_Buildkit_V1_Descriptor {
+    get {_storage._trace ?? Moby_Buildkit_V1_Descriptor()}
+    set {_uniqueStorage()._trace = newValue}
+  }
+  /// Returns true if `trace` has been explicitly set.
+  public var hasTrace: Bool {_storage._trace != nil}
+  /// Clears the value of `trace`. Subsequent reads from it will return its default value.
+  public mutating func clearTrace() {_uniqueStorage()._trace = nil}
 
-  public var numTotalSteps: Int32 = 0
+  public var numCachedSteps: Int32 {
+    get {_storage._numCachedSteps}
+    set {_uniqueStorage()._numCachedSteps = newValue}
+  }
 
-  public var numCompletedSteps: Int32 = 0
+  public var numTotalSteps: Int32 {
+    get {_storage._numTotalSteps}
+    set {_uniqueStorage()._numTotalSteps = newValue}
+  }
 
-  public var numWarnings: Int32 = 0
+  public var numCompletedSteps: Int32 {
+    get {_storage._numCompletedSteps}
+    set {_uniqueStorage()._numCompletedSteps = newValue}
+  }
+
+  public var numWarnings: Int32 {
+    get {_storage._numWarnings}
+    set {_uniqueStorage()._numWarnings = newValue}
+  }
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 
-  fileprivate var _error: Moby_Buildkit_V1_BuildHistoryStatus? = nil
-  fileprivate var _createdAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
-  fileprivate var _completedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+  fileprivate var _storage = _StorageClass.defaultInstance
 }
 
 public struct Moby_Buildkit_V1_BuildHistoryStatus: Sendable {
@@ -260,6 +288,24 @@ public struct Moby_Buildkit_V1_BuildHistoryStatus: Sendable {
   public var code: Int32 = 0
 
   public var message: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Moby_Buildkit_V1_Descriptor: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var mediaType: String = String()
+
+  public var digest: String = String()
+
+  public var size: Int64 = 0
+
+  public var annotations: Dictionary<String,String> = [:]
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -574,78 +620,139 @@ extension Moby_Buildkit_V1_BuildHistoryEvent: SwiftProtobuf.Message, SwiftProtob
 
 extension Moby_Buildkit_V1_BuildHistoryRecord: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".BuildHistoryRecord"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}Ref\0\u{1}Frontend\0\u{1}FrontendAttrs\0\u{2}\u{2}error\0\u{1}CreatedAt\0\u{1}CompletedAt\0\u{2}\u{8}numCachedSteps\0\u{1}numTotalSteps\0\u{1}numCompletedSteps\0\u{2}\u{2}numWarnings\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}Ref\0\u{1}Frontend\0\u{1}FrontendAttrs\0\u{2}\u{2}error\0\u{1}CreatedAt\0\u{1}CompletedAt\0\u{2}\u{6}trace\0\u{2}\u{2}numCachedSteps\0\u{1}numTotalSteps\0\u{1}numCompletedSteps\0\u{2}\u{2}numWarnings\0")
+
+  fileprivate class _StorageClass {
+    var _ref: String = String()
+    var _frontend: String = String()
+    var _frontendAttrs: Dictionary<String,String> = [:]
+    var _error: Moby_Buildkit_V1_BuildHistoryStatus? = nil
+    var _createdAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+    var _completedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+    var _trace: Moby_Buildkit_V1_Descriptor? = nil
+    var _numCachedSteps: Int32 = 0
+    var _numTotalSteps: Int32 = 0
+    var _numCompletedSteps: Int32 = 0
+    var _numWarnings: Int32 = 0
+
+      // This property is used as the initial default value for new instances of the type.
+      // The type itself is protecting the reference to its storage via CoW semantics.
+      // This will force a copy to be made of this reference when the first mutation occurs;
+      // hence, it is safe to mark this as `nonisolated(unsafe)`.
+      static nonisolated(unsafe) let defaultInstance = _StorageClass()
+
+    private init() {}
+
+    init(copying source: _StorageClass) {
+      _ref = source._ref
+      _frontend = source._frontend
+      _frontendAttrs = source._frontendAttrs
+      _error = source._error
+      _createdAt = source._createdAt
+      _completedAt = source._completedAt
+      _trace = source._trace
+      _numCachedSteps = source._numCachedSteps
+      _numTotalSteps = source._numTotalSteps
+      _numCompletedSteps = source._numCompletedSteps
+      _numWarnings = source._numWarnings
+    }
+  }
+
+  fileprivate mutating func _uniqueStorage() -> _StorageClass {
+    if !isKnownUniquelyReferenced(&_storage) {
+      _storage = _StorageClass(copying: _storage)
+    }
+    return _storage
+  }
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 1: try { try decoder.decodeSingularStringField(value: &self.ref) }()
-      case 2: try { try decoder.decodeSingularStringField(value: &self.frontend) }()
-      case 3: try { try decoder.decodeMapField(fieldType: SwiftProtobuf._ProtobufMap<SwiftProtobuf.ProtobufString,SwiftProtobuf.ProtobufString>.self, value: &self.frontendAttrs) }()
-      case 5: try { try decoder.decodeSingularMessageField(value: &self._error) }()
-      case 6: try { try decoder.decodeSingularMessageField(value: &self._createdAt) }()
-      case 7: try { try decoder.decodeSingularMessageField(value: &self._completedAt) }()
-      case 15: try { try decoder.decodeSingularInt32Field(value: &self.numCachedSteps) }()
-      case 16: try { try decoder.decodeSingularInt32Field(value: &self.numTotalSteps) }()
-      case 17: try { try decoder.decodeSingularInt32Field(value: &self.numCompletedSteps) }()
-      case 19: try { try decoder.decodeSingularInt32Field(value: &self.numWarnings) }()
-      default: break
+    _ = _uniqueStorage()
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      while let fieldNumber = try decoder.nextFieldNumber() {
+        // The use of inline closures is to circumvent an issue where the compiler
+        // allocates stack space for every case branch when no optimizations are
+        // enabled. https://github.com/apple/swift-protobuf/issues/1034
+        switch fieldNumber {
+        case 1: try { try decoder.decodeSingularStringField(value: &_storage._ref) }()
+        case 2: try { try decoder.decodeSingularStringField(value: &_storage._frontend) }()
+        case 3: try { try decoder.decodeMapField(fieldType: SwiftProtobuf._ProtobufMap<SwiftProtobuf.ProtobufString,SwiftProtobuf.ProtobufString>.self, value: &_storage._frontendAttrs) }()
+        case 5: try { try decoder.decodeSingularMessageField(value: &_storage._error) }()
+        case 6: try { try decoder.decodeSingularMessageField(value: &_storage._createdAt) }()
+        case 7: try { try decoder.decodeSingularMessageField(value: &_storage._completedAt) }()
+        case 13: try { try decoder.decodeSingularMessageField(value: &_storage._trace) }()
+        case 15: try { try decoder.decodeSingularInt32Field(value: &_storage._numCachedSteps) }()
+        case 16: try { try decoder.decodeSingularInt32Field(value: &_storage._numTotalSteps) }()
+        case 17: try { try decoder.decodeSingularInt32Field(value: &_storage._numCompletedSteps) }()
+        case 19: try { try decoder.decodeSingularInt32Field(value: &_storage._numWarnings) }()
+        default: break
+        }
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    // The use of inline closures is to circumvent an issue where the compiler
-    // allocates stack space for every if/case branch local when no optimizations
-    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
-    // https://github.com/apple/swift-protobuf/issues/1182
-    if !self.ref.isEmpty {
-      try visitor.visitSingularStringField(value: self.ref, fieldNumber: 1)
-    }
-    if !self.frontend.isEmpty {
-      try visitor.visitSingularStringField(value: self.frontend, fieldNumber: 2)
-    }
-    if !self.frontendAttrs.isEmpty {
-      try visitor.visitMapField(fieldType: SwiftProtobuf._ProtobufMap<SwiftProtobuf.ProtobufString,SwiftProtobuf.ProtobufString>.self, value: self.frontendAttrs, fieldNumber: 3)
-    }
-    try { if let v = self._error {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 5)
-    } }()
-    try { if let v = self._createdAt {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 6)
-    } }()
-    try { if let v = self._completedAt {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 7)
-    } }()
-    if self.numCachedSteps != 0 {
-      try visitor.visitSingularInt32Field(value: self.numCachedSteps, fieldNumber: 15)
-    }
-    if self.numTotalSteps != 0 {
-      try visitor.visitSingularInt32Field(value: self.numTotalSteps, fieldNumber: 16)
-    }
-    if self.numCompletedSteps != 0 {
-      try visitor.visitSingularInt32Field(value: self.numCompletedSteps, fieldNumber: 17)
-    }
-    if self.numWarnings != 0 {
-      try visitor.visitSingularInt32Field(value: self.numWarnings, fieldNumber: 19)
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every if/case branch local when no optimizations
+      // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+      // https://github.com/apple/swift-protobuf/issues/1182
+      if !_storage._ref.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._ref, fieldNumber: 1)
+      }
+      if !_storage._frontend.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._frontend, fieldNumber: 2)
+      }
+      if !_storage._frontendAttrs.isEmpty {
+        try visitor.visitMapField(fieldType: SwiftProtobuf._ProtobufMap<SwiftProtobuf.ProtobufString,SwiftProtobuf.ProtobufString>.self, value: _storage._frontendAttrs, fieldNumber: 3)
+      }
+      try { if let v = _storage._error {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 5)
+      } }()
+      try { if let v = _storage._createdAt {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 6)
+      } }()
+      try { if let v = _storage._completedAt {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 7)
+      } }()
+      try { if let v = _storage._trace {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 13)
+      } }()
+      if _storage._numCachedSteps != 0 {
+        try visitor.visitSingularInt32Field(value: _storage._numCachedSteps, fieldNumber: 15)
+      }
+      if _storage._numTotalSteps != 0 {
+        try visitor.visitSingularInt32Field(value: _storage._numTotalSteps, fieldNumber: 16)
+      }
+      if _storage._numCompletedSteps != 0 {
+        try visitor.visitSingularInt32Field(value: _storage._numCompletedSteps, fieldNumber: 17)
+      }
+      if _storage._numWarnings != 0 {
+        try visitor.visitSingularInt32Field(value: _storage._numWarnings, fieldNumber: 19)
+      }
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Moby_Buildkit_V1_BuildHistoryRecord, rhs: Moby_Buildkit_V1_BuildHistoryRecord) -> Bool {
-    if lhs.ref != rhs.ref {return false}
-    if lhs.frontend != rhs.frontend {return false}
-    if lhs.frontendAttrs != rhs.frontendAttrs {return false}
-    if lhs._error != rhs._error {return false}
-    if lhs._createdAt != rhs._createdAt {return false}
-    if lhs._completedAt != rhs._completedAt {return false}
-    if lhs.numCachedSteps != rhs.numCachedSteps {return false}
-    if lhs.numTotalSteps != rhs.numTotalSteps {return false}
-    if lhs.numCompletedSteps != rhs.numCompletedSteps {return false}
-    if lhs.numWarnings != rhs.numWarnings {return false}
+    if lhs._storage !== rhs._storage {
+      let storagesAreEqual: Bool = withExtendedLifetime((lhs._storage, rhs._storage)) { (_args: (_StorageClass, _StorageClass)) in
+        let _storage = _args.0
+        let rhs_storage = _args.1
+        if _storage._ref != rhs_storage._ref {return false}
+        if _storage._frontend != rhs_storage._frontend {return false}
+        if _storage._frontendAttrs != rhs_storage._frontendAttrs {return false}
+        if _storage._error != rhs_storage._error {return false}
+        if _storage._createdAt != rhs_storage._createdAt {return false}
+        if _storage._completedAt != rhs_storage._completedAt {return false}
+        if _storage._trace != rhs_storage._trace {return false}
+        if _storage._numCachedSteps != rhs_storage._numCachedSteps {return false}
+        if _storage._numTotalSteps != rhs_storage._numTotalSteps {return false}
+        if _storage._numCompletedSteps != rhs_storage._numCompletedSteps {return false}
+        if _storage._numWarnings != rhs_storage._numWarnings {return false}
+        return true
+      }
+      if !storagesAreEqual {return false}
+    }
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -681,6 +788,51 @@ extension Moby_Buildkit_V1_BuildHistoryStatus: SwiftProtobuf.Message, SwiftProto
   public static func ==(lhs: Moby_Buildkit_V1_BuildHistoryStatus, rhs: Moby_Buildkit_V1_BuildHistoryStatus) -> Bool {
     if lhs.code != rhs.code {return false}
     if lhs.message != rhs.message {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Moby_Buildkit_V1_Descriptor: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".Descriptor"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}media_type\0\u{1}digest\0\u{1}size\0\u{2}\u{2}annotations\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.mediaType) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.digest) }()
+      case 3: try { try decoder.decodeSingularInt64Field(value: &self.size) }()
+      case 5: try { try decoder.decodeMapField(fieldType: SwiftProtobuf._ProtobufMap<SwiftProtobuf.ProtobufString,SwiftProtobuf.ProtobufString>.self, value: &self.annotations) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.mediaType.isEmpty {
+      try visitor.visitSingularStringField(value: self.mediaType, fieldNumber: 1)
+    }
+    if !self.digest.isEmpty {
+      try visitor.visitSingularStringField(value: self.digest, fieldNumber: 2)
+    }
+    if self.size != 0 {
+      try visitor.visitSingularInt64Field(value: self.size, fieldNumber: 3)
+    }
+    if !self.annotations.isEmpty {
+      try visitor.visitMapField(fieldType: SwiftProtobuf._ProtobufMap<SwiftProtobuf.ProtobufString,SwiftProtobuf.ProtobufString>.self, value: self.annotations, fieldNumber: 5)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Moby_Buildkit_V1_Descriptor, rhs: Moby_Buildkit_V1_Descriptor) -> Bool {
+    if lhs.mediaType != rhs.mediaType {return false}
+    if lhs.digest != rhs.digest {return false}
+    if lhs.size != rhs.size {return false}
+    if lhs.annotations != rhs.annotations {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

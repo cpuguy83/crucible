@@ -483,6 +483,35 @@ final class TrayViewModel: ObservableObject {
         }
     }
 
+    func exportBuildTrace(_ descriptor: BuildHistoryDescriptor, suggestedName: String) {
+        guard let endpoint else {
+            logStore.append(source: .supervisor, level: .warning, "trace unavailable: BuildKit is not running")
+            return
+        }
+
+        let panel = NSSavePanel()
+        panel.title = "Export Build Trace"
+        panel.nameFieldStringValue = "crucible-build-\(Self.shortRef(suggestedName))-trace.otlp.json"
+        panel.allowedContentTypes = [.json]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        Task {
+            do {
+                let data = try await BuildHistoryClient(socketPath: endpoint.socketPath).buildTrace(descriptor)
+                try data.write(to: url, options: .atomic)
+                await MainActor.run {
+                    self.logStore.append(source: .supervisor, level: .info, "Exported build trace to \(url.path)")
+                }
+            } catch {
+                let msg = buildKitUserMessage(for: error)
+                await MainActor.run {
+                    self.logStore.append(source: .supervisor, level: .error, "trace export failed: \(msg)")
+                    NSAlert(error: error).runModal()
+                }
+            }
+        }
+    }
+
     func openSettingsWindow() {
         if settingsWindowController == nil {
             settingsWindowController = SettingsWindowController(viewModel: self) { [weak self] in
@@ -1037,5 +1066,16 @@ final class TrayViewModel: ObservableObject {
         case .error:
             return .error
         }
+    }
+
+    private static func safeFilename(_ value: String) -> String {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_."))
+        let scalars = value.unicodeScalars.map { allowed.contains($0) ? Character($0) : "-" }
+        let name = String(scalars).trimmingCharacters(in: CharacterSet(charactersIn: "-."))
+        return name.isEmpty ? "build" : name
+    }
+
+    private static func shortRef(_ value: String) -> String {
+        String(safeFilename(value).prefix(12))
     }
 }
