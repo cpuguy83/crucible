@@ -31,6 +31,7 @@ project:
 app: project
 	xcodebuild -project Crucible.xcodeproj -scheme $(SCHEME) -configuration $(CONFIGURATION) \
 	    -derivedDataPath $(DERIVED_DATA) build
+	@test "$$(/usr/libexec/PlistBuddy -c 'Print :LSUIElement' "$(APP_PATH)/Contents/Info.plist")" = "true"
 
 # Print the path to the built .app.
 app-path:

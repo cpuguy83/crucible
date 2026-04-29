@@ -18,6 +18,8 @@ final class TrayViewModel: ObservableObject {
     @Published var launchAtLoginEnabled: Bool
     @Published var settingsDraft: BuildKitSettings
     @Published private(set) var prerequisiteChecks: [PrerequisiteCheck] = []
+    @Published private(set) var activeBuilds: [ActiveBuild] = []
+    @Published private(set) var activeBuildsStatus: String = "Not checked"
 
     let logStore = LogStore()
 
@@ -337,6 +339,7 @@ final class TrayViewModel: ObservableObject {
         Buildx: \(buildxStatus.displayText)
         Endpoint: \(endpoint?.url ?? "none")
         Storage: \(storageUsage?.displayText ?? "not created")
+        Active builds: \(activeBuildsStatus)
         Backend: \(appliedSettings.backend.rawValue)
         BuildKit image: \(appliedSettings.imageReference)
         Worker platforms: \(configuredWorkerPlatforms)
@@ -505,6 +508,33 @@ final class TrayViewModel: ObservableObject {
             await MainActor.run {
                 self.prerequisiteChecks = checks
                 self.logStore.append(source: .supervisor, level: .info, "Prerequisite check complete")
+            }
+        }
+    }
+
+    func refreshActiveBuilds() {
+        guard let endpoint else {
+            activeBuilds = []
+            activeBuildsStatus = "BuildKit is not running"
+            return
+        }
+
+        activeBuildsStatus = "Checking…"
+        Task {
+            do {
+                let builds = try await BuildHistoryClient(socketPath: endpoint.socketPath).activeBuilds()
+                await MainActor.run {
+                    self.activeBuilds = builds
+                    self.activeBuildsStatus = builds.isEmpty ? "No active builds" : "\(builds.count) active"
+                    self.logStore.append(source: .supervisor, level: .info, "active builds: \(self.activeBuildsStatus)")
+                }
+            } catch {
+                let msg = buildKitUserMessage(for: error)
+                await MainActor.run {
+                    self.activeBuilds = []
+                    self.activeBuildsStatus = "Unavailable: \(msg)"
+                    self.logStore.append(source: .supervisor, level: .warning, "active builds unavailable: \(msg)")
+                }
             }
         }
     }

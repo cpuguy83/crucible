@@ -110,6 +110,27 @@ struct SettingsValidatorTests {
         #expect(message == "Failed to start BuildKit. mount failed")
     }
 
+    @Test func activeBuildMapsBuildHistoryRecord() {
+        var record = Moby_Buildkit_V1_BuildHistoryRecord()
+        record.ref = "build-123"
+        record.frontend = "dockerfile.v0"
+        record.frontendAttrs["target"] = "release"
+        record.numCompletedSteps = 3
+        record.numTotalSteps = 5
+        record.numCachedSteps = 2
+        record.numWarnings = 1
+
+        let build = ActiveBuild(record: record)
+
+        #expect(build.ref == "build-123")
+        #expect(build.frontend == "dockerfile.v0")
+        #expect(build.target == "release")
+        #expect(build.completedSteps == 3)
+        #expect(build.totalSteps == 5)
+        #expect(build.cachedSteps == 2)
+        #expect(build.warnings == 1)
+    }
+
     @Test func emptyImageReferenceRejected() {
         var s = BuildKitSettings()
         s.imageReference = ""

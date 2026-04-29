@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package moby.buildkit.v1;
+
+service Control {
+  rpc ListenBuildHistory(BuildHistoryRequest) returns (stream BuildHistoryEvent);
+}
+
+message BuildHistoryRequest {
+  bool ActiveOnly = 1;
+  string Ref = 2;
+  bool EarlyExit = 3;
+  repeated string Filter = 4;
+  int32 Limit = 5;
+}
+
+enum BuildHistoryEventType {
+  STARTED = 0;
+  COMPLETE = 1;
+  DELETED = 2;
+}
+
+message BuildHistoryEvent {
+  BuildHistoryEventType type = 1;
+  BuildHistoryRecord record = 2;
+}
+
+message BuildHistoryRecord {
+  string Ref = 1;
+  string Frontend = 2;
+  map<string, string> FrontendAttrs = 3;
+  int32 numCachedSteps = 15;
+  int32 numTotalSteps = 16;
+  int32 numCompletedSteps = 17;
+  int32 numWarnings = 19;
+}

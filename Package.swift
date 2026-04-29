@@ -15,12 +15,23 @@ let package = Package(
         // Apple's Containerization framework. Pinned to next-minor for source stability
         // per upstream guidance (0.x is unstable across minors).
         .package(url: "https://github.com/apple/containerization.git", .upToNextMinor(from: "0.31.0")),
+        .package(url: "https://github.com/grpc/grpc-swift-2.git", from: "2.3.0"),
+        .package(url: "https://github.com/grpc/grpc-swift-nio-transport.git", from: "2.4.4"),
+        .package(url: "https://github.com/grpc/grpc-swift-protobuf.git", from: "2.2.0"),
     ],
     targets: [
-        // Pure, dependency-free supervisor + protocol surface. Headless and unit-testable.
+        // Headless, unit-testable supervisor/protocol surface plus typed BuildKit control client.
         .target(
             name: "BuildKitCore",
-            path: "Sources/BuildKitCore"
+            dependencies: [
+                .product(name: "GRPCCore", package: "grpc-swift-2"),
+                .product(name: "GRPCNIOTransportHTTP2", package: "grpc-swift-nio-transport"),
+                .product(name: "GRPCProtobuf", package: "grpc-swift-protobuf"),
+            ],
+            path: "Sources/BuildKitCore",
+            exclude: [
+                "Protos"
+            ]
         ),
         // Default backend: links apple/containerization directly.
         .target(

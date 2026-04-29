@@ -392,12 +392,45 @@ struct SettingsWindowView: View {
             card("Current State") {
                 metricRow("Daemon", viewModel.statusText)
                 metricRow("Buildx", viewModel.buildxStatus.displayText)
+                metricRow("Active Builds", viewModel.activeBuildsStatus)
                 metricRow("Endpoint", viewModel.endpoint?.url ?? "none")
                 metricRow("Backend", viewModel.appliedSettings.backend.rawValue)
                 metricRow("Image", viewModel.appliedSettings.imageReference)
                 metricRow("Platforms", viewModel.configuredWorkerPlatforms)
                 metricRow("Rosetta", "enabled automatically when available")
                 metricRow("Last Error", viewModel.lastError ?? "none")
+            }
+
+            card("Active Builds") {
+                HStack {
+                    Button("Refresh Active Builds", action: viewModel.refreshActiveBuilds)
+                        .disabled(viewModel.endpoint == nil)
+                    Text(viewModel.activeBuildsStatus)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+
+                if viewModel.activeBuilds.isEmpty {
+                    Text("No active build history records are currently visible.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                } else {
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(viewModel.activeBuilds, id: \.ref) { build in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(build.target.map { "\(build.frontend) / \($0)" } ?? build.frontend)
+                                    .font(.callout.weight(.medium))
+                                Text(build.ref)
+                                    .font(.caption.monospaced())
+                                    .foregroundStyle(.secondary)
+                                    .textSelection(.enabled)
+                                Text("\(build.completedSteps)/\(build.totalSteps) steps, \(build.cachedSteps) cached, \(build.warnings) warnings")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
             }
 
             card("Effective Daemon Config") {
