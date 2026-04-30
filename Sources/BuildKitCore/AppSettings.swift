@@ -86,6 +86,18 @@ public struct AppSettings: Sendable, Equatable, Codable {
         return copy
     }
 
+    public func replacingSelectedDockerSettings(_ settings: DockerSettings) -> AppSettings {
+        var copy = self
+        guard let index = copy.builders.firstIndex(where: { $0.id == copy.selectedBuilderID }) else {
+            return copy
+        }
+        guard case .docker = copy.builders[index].kind else {
+            return copy
+        }
+        copy.builders[index].kind = .docker(settings)
+        return copy
+    }
+
     public static func migrating(_ settings: BuildKitSettings) -> AppSettings {
         AppSettings(builders: [.buildKit(id: BuilderConfig.defaultBuildKitID, name: "Crucible", settings: settings)])
     }

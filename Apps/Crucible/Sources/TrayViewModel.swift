@@ -18,6 +18,7 @@ final class TrayViewModel: ObservableObject {
     @Published private(set) var appliedSettings: BuildKitSettings
     @Published var launchAtLoginEnabled: Bool
     @Published var settingsDraft: BuildKitSettings
+    @Published var dockerSettingsDraft: DockerSettings
     @Published private(set) var prerequisiteChecks: [PrerequisiteCheck] = []
     @Published private(set) var activeBuilds: [ActiveBuild] = []
     @Published private(set) var activeBuildsStatus: ActiveBuildStatus = .notChecked
@@ -45,6 +46,7 @@ final class TrayViewModel: ObservableObject {
         self.appSettings = appSettings
         self.appliedSettings = settings
         self.settingsDraft = settings
+        self.dockerSettingsDraft = appSettings.selectedDockerSettings
         self.launchAtLoginEnabled = LoginItemManager.isEnabled
         self.runtime = Self.makeRuntime(appSettings: appSettings)
         self.state = runtime.initialState
@@ -142,6 +144,24 @@ final class TrayViewModel: ObservableObject {
                 isSelected: builder.id == appSettings.selectedBuilderID
             )
         }
+    }
+
+    var selectedBuilderID: String {
+        get { appSettings.selectedBuilderID }
+        set { selectBuilder(id: newValue) }
+    }
+
+    var canSwitchBuilders: Bool { !isRunning && !settingsApplyBlocked }
+
+    var hasDockerBuilder: Bool { appSettings.builders.contains { if case .docker = $0.kind { return true }; return false } }
+
+    var dockerSettingsDirty: Bool {
+        guard case .docker(let settings) = appSettings.selectedBuilder.kind else { return false }
+        return dockerSettingsDraft != settings
+    }
+
+    var canSaveDockerSettings: Bool {
+        !settingsApplyBlocked && dockerSettingsDirty && BuilderConfigValidator.validate(dockerSettingsDraft).isEmpty
     }
 
     var activeBuildsStatusText: String { activeBuildsStatus.displayText }
@@ -295,6 +315,7 @@ final class TrayViewModel: ObservableObject {
                 self.appSettings = defaultAppSettings
                 self.appliedSettings = defaults
                 self.settingsDraft = defaults
+                self.dockerSettingsDraft = defaultAppSettings.selectedDockerSettings
                 self.launchAtLoginEnabled = LoginItemManager.isEnabled
                 self.subscribedToBackend = false
                 self.subscriberTask?.cancel()
@@ -331,6 +352,7 @@ final class TrayViewModel: ObservableObject {
                 let settings = self.appliedSettings
                 let appSettings = self.appSettings.replacingSelectedBuildKitSettings(settings)
                 self.appSettings = appSettings
+                self.dockerSettingsDraft = appSettings.selectedDockerSettings
                 try AppSettingsStore.save(appSettings)
                 try self.removeAppSupportDataPreservingSettings()
                 try AppSettingsStore.save(appSettings)
@@ -363,6 +385,7 @@ final class TrayViewModel: ObservableObject {
                 let defaults = defaultAppSettings.selectedBuildKitSettings
                 self.runtime = Self.makeRuntime(appSettings: defaultAppSettings)
                 self.appSettings = defaultAppSettings
+                self.dockerSettingsDraft = defaultAppSettings.selectedDockerSettings
                 self.launchAtLoginEnabled = LoginItemManager.isEnabled
                 self.finishReset(settings: defaults, message: "Factory reset complete")
             } catch {
@@ -685,6 +708,68 @@ final class TrayViewModel: ObservableObject {
                 self.logStore.append(source: .supervisor, level: .error, "settings save failed: \(msg)")
             }
         }
+    }
+
+    func addDockerBuilder() {
+        guard canSwitchBuilders else { return }
+        var next = appSettings.upsertingBuilder(.docker(id: "docker", name: "Docker"), select: true)
+        if next.builders.filter({ $0.id == "docker" }).count > 1 {
+            next = next.selectingBuilder(id: "docker")
+        }
+        applyAppSettings(next)
+        do {
+            try AppSettingsStore.save(next)
+        } catch {
+            lastError = buildKitUserMessage(for: error)
+        }
+    }
+
+    func saveDockerSettings() {
+        guard canSaveDockerSettings else { return }
+        let next = appSettings.replacingSelectedDockerSettings(dockerSettingsDraft)
+        do {
+            try AppSettingsStore.save(next)
+            applyAppSettings(next)
+            lastError = nil
+            logStore.append(source: .supervisor, level: .info, "Applied Docker builder settings")
+        } catch {
+            lastError = buildKitUserMessage(for: error)
+        }
+    }
+
+    func resetDockerSettingsDraft() {
+        dockerSettingsDraft = appSettings.selectedDockerSettings
+    }
+
+    private func selectBuilder(id: String) {
+        guard canSwitchBuilders, id != appSettings.selectedBuilderID else { return }
+        let next = appSettings.selectingBuilder(id: id)
+        do {
+            try AppSettingsStore.save(next)
+            applyAppSettings(next)
+        } catch {
+            lastError = buildKitUserMessage(for: error)
+        }
+    }
+
+    private func applyAppSettings(_ settings: AppSettings) {
+        appSettings = settings
+        appliedSettings = settings.selectedBuildKitSettings
+        settingsDraft = appliedSettings
+        dockerSettingsDraft = settings.selectedDockerSettings
+        runtime = Self.makeRuntime(appSettings: settings)
+        state = runtime.initialState
+        dockerEndpoint = nil
+        subscribedToBackend = false
+        subscriberTask?.cancel()
+        activeBuildRefreshTask?.cancel()
+        activeBuildRefreshTask = nil
+        subscriberTask = nil
+        activeBuilds = []
+        activeBuildsStatus = .notChecked
+        recentBuilds = []
+        recentBuildsStatus = .notChecked
+        buildxStatus = .unknown
     }
 
     func revertSettingsDraft() {

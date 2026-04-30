@@ -135,10 +135,14 @@ struct SettingsWindowView: View {
     private var buildersView: some View {
         VStack(alignment: .leading, spacing: 16) {
             card("Selected Builder") {
-                metricRow("Saved Name", viewModel.selectedBuilderName)
-                metricRow("Type", viewModel.selectedBuilderKindText)
+                Picker("Selected", selection: $viewModel.selectedBuilderID) {
+                    ForEach(viewModel.builderSummaries) { builder in
+                        Text("\(builder.name) (\(builder.kindText))").tag(builder.id)
+                    }
+                }
+                .disabled(!viewModel.canSwitchBuilders)
                 metricRow("Buildx Name", viewModel.buildxBuilderName)
-                Text("Saved builder names distinguish configured endpoints. Docker buildx integration continues to use the single active Crucible builder name `\(viewModel.buildxBuilderName)`.")
+                Text("Only one Crucible builder can run at a time. Stop the current builder before switching.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
@@ -163,6 +167,23 @@ struct SettingsWindowView: View {
                                     .foregroundStyle(.secondary)
                             }
                         }
+                    }
+                    if !viewModel.hasDockerBuilder {
+                        Button("Add Docker Builder", action: viewModel.addDockerBuilder)
+                            .disabled(!viewModel.canSwitchBuilders)
+                    }
+                }
+            }
+
+            if viewModel.selectedBuilderKindText == "Docker" {
+                card("Docker") {
+                    settingLabel("Docker daemon image", "OCI image used to start the Docker-in-Docker daemon.")
+                    TextField("docker.io/library/docker:dind", text: $viewModel.dockerSettingsDraft.imageReference)
+                    HStack {
+                        Button("Save Docker Settings", action: viewModel.saveDockerSettings)
+                            .disabled(!viewModel.canSaveDockerSettings)
+                        Button("Reset Draft", action: viewModel.resetDockerSettingsDraft)
+                        .disabled(!viewModel.dockerSettingsDirty)
                     }
                 }
             }

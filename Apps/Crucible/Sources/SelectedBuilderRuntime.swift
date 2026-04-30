@@ -161,8 +161,8 @@ struct SelectedBuilderRuntime {
             return .stopped
         case .starting:
             return .starting
-        case .running:
-            return .degraded(reason: "Docker daemon is running; BuildKit transport is not connected yet.", endpoint: nil)
+        case .running(let endpoint):
+            return .running(endpoint: BuildKitEndpoint(socketPath: endpoint.socketPath))
         case .stopping:
             return .stopping
         case .error(let message):
