@@ -1088,6 +1088,20 @@ final class TrayViewModel: ObservableObject {
         logStore.append(source: .buildx, level: .info, "Copied BUILDKIT_HOST env")
     }
 
+    func copyDockerHostEnv() {
+        guard let ep = dockerEndpoint else { return }
+        let url = BuildxCommands.unixURL(for: BuildKitEndpoint(socketPath: ep.socketPath))
+        copyToPasteboard("DOCKER_HOST='\(url)'")
+        logStore.append(source: .buildx, level: .info, "Copied DOCKER_HOST env")
+    }
+
+    func copyDockerContextCreateCommand() {
+        guard let ep = dockerEndpoint else { return }
+        let url = BuildxCommands.unixURL(for: BuildKitEndpoint(socketPath: ep.socketPath))
+        copyToPasteboard("docker context create crucible --docker 'host=\(url)'")
+        logStore.append(source: .buildx, level: .info, "Copied docker context create command")
+    }
+
     func copyBuildxCreateCommand() {
         guard runtime.supportsRawBuildKitEndpoint else { return }
         guard let ep = endpoint else { return }

@@ -51,7 +51,7 @@ struct SettingsWindowView: View {
     private func sidebarRow(_ section: SettingsSection) -> some View {
         Button {
             selection = section
-            if section == .buildx, viewModel.buildxStatus == .unknown {
+            if section == .integrations, viewModel.buildxStatus == .unknown {
                 viewModel.refreshBuildxStatus()
             }
         } label: {
@@ -83,8 +83,8 @@ struct SettingsWindowView: View {
                     buildersView
                 case .general:
                     generalView
-                case .buildx:
-                    buildxView
+                case .integrations:
+                    integrationsView
                 case .builds:
                     buildsView
                 case .storage:
@@ -450,31 +450,68 @@ struct SettingsWindowView: View {
         }
     }
 
-    private var buildxView: some View {
+    private var integrationsView: some View {
         VStack(alignment: .leading, spacing: 16) {
-            card("Builder") {
-                metricRow("Status", viewModel.buildxStatus.displayText)
-                Text("Register Crucible as a remote docker buildx builder named `crucible`, and optionally set it as the current builder.")
-                    .foregroundStyle(.secondary)
-                    .font(.callout)
-                HStack {
-                    Button("Add and Use", action: viewModel.addToBuildx)
-                        .disabled(!viewModel.isRunning || !viewModel.supportsRawBuildKitEndpoint)
-                    Button("Refresh", action: viewModel.refreshBuildxStatus)
-                    Button("Recreate", action: viewModel.recreateBuildxBuilder)
-                        .disabled(!viewModel.isRunning || !viewModel.supportsRawBuildKitEndpoint)
-                    Button("Remove", action: viewModel.removeBuildxBuilder)
-                        .disabled(!viewModel.supportsRawBuildKitEndpoint)
-                }
+            if viewModel.selectedBuilderIsDocker {
+                dockerSocketIntegrationCard
+                dockerBuildxIntegrationCard
+            } else {
+                buildKitBuildxIntegrationCard
+            }
+        }
+    }
+
+    private var buildKitBuildxIntegrationCard: some View {
+        card("Docker Buildx") {
+            metricRow("Status", viewModel.buildxStatus.displayText)
+            Text("Register the selected BuildKit builder as a remote docker buildx builder named `\(viewModel.buildxBuilderName)`, and optionally set it as the current builder.")
+                .foregroundStyle(.secondary)
+                .font(.callout)
+            HStack {
+                Button("Add and Use", action: viewModel.addToBuildx)
+                    .disabled(!viewModel.isRunning || !viewModel.supportsRawBuildKitEndpoint)
+                Button("Refresh", action: viewModel.refreshBuildxStatus)
+                Button("Recreate", action: viewModel.recreateBuildxBuilder)
+                    .disabled(!viewModel.isRunning || !viewModel.supportsRawBuildKitEndpoint)
+                Button("Remove", action: viewModel.removeBuildxBuilder)
+                    .disabled(!viewModel.supportsRawBuildKitEndpoint)
             }
 
-            card("Commands") {
-                HStack {
-                    Button("Copy buildx create command", action: viewModel.copyBuildxCreateCommand)
-                        .disabled(viewModel.endpoint == nil || !viewModel.supportsRawBuildKitEndpoint)
-                    Button("Copy BUILDKIT_HOST env", action: viewModel.copyBuildKitHostEnv)
-                        .disabled(viewModel.endpoint == nil || !viewModel.supportsRawBuildKitEndpoint)
-                }
+            Divider()
+
+            HStack {
+                Button("Copy buildx create command", action: viewModel.copyBuildxCreateCommand)
+                    .disabled(viewModel.endpoint == nil || !viewModel.supportsRawBuildKitEndpoint)
+                Button("Copy BUILDKIT_HOST env", action: viewModel.copyBuildKitHostEnv)
+                    .disabled(viewModel.endpoint == nil || !viewModel.supportsRawBuildKitEndpoint)
+            }
+        }
+    }
+
+    private var dockerSocketIntegrationCard: some View {
+        card("Docker CLI") {
+            metricRow("Socket", viewModel.displayedSocketPath ?? "Not available")
+            Text("Use the selected Docker builder by pointing Docker-compatible tools at Crucible's Docker socket while the builder is running.")
+                .foregroundStyle(.secondary)
+                .font(.callout)
+            HStack {
+                Button("Copy DOCKER_HOST env", action: viewModel.copyDockerHostEnv)
+                    .disabled(viewModel.dockerEndpoint == nil)
+                Button("Copy Docker context command", action: viewModel.copyDockerContextCreateCommand)
+                    .disabled(viewModel.dockerEndpoint == nil)
+            }
+        }
+    }
+
+    private var dockerBuildxIntegrationCard: some View {
+        card("Docker Buildx") {
+            Text("Docker buildx can use the Docker daemon socket directly through `DOCKER_HOST` or a Docker context. Crucible does not create a separate remote BuildKit builder for Docker-backed builders yet.")
+                .foregroundStyle(.secondary)
+                .font(.callout)
+            if viewModel.dockerEndpoint == nil {
+                Text("Start the Docker builder to expose its socket.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -1203,7 +1240,7 @@ struct SettingsWindowView: View {
 private enum SettingsSection: String, CaseIterable, Identifiable {
     case builders
     case general
-    case buildx
+    case integrations
     case builds
     case storage
     case reset
@@ -1215,7 +1252,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
         switch self {
         case .builders: "Builders"
         case .general: "General"
-        case .buildx: "Buildx"
+        case .integrations: "Integrations"
         case .builds: "Builds"
         case .storage: "Storage"
         case .reset: "Reset"
@@ -1227,7 +1264,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
         switch self {
         case .builders: "Select which builder Crucible controls."
         case .general: "Control the selected builder and copy its endpoint."
-        case .buildx: "Manage docker buildx integration."
+        case .integrations: "Connect the selected builder to host tools."
         case .builds: "Watch active builder solves."
         case .storage: "Manage cache, metadata, and persistent state."
         case .reset: "Reset configuration or local data."
@@ -1239,7 +1276,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
         switch self {
         case .builders: "rectangle.stack"
         case .general: "switch.2"
-        case .buildx: "hammer"
+        case .integrations: "point.3.connected.trianglepath.dotted"
         case .builds: "list.bullet.rectangle"
         case .storage: "internaldrive"
         case .reset: "arrow.counterclockwise"
