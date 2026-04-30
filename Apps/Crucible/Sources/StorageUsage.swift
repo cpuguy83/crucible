@@ -36,15 +36,54 @@ struct StorageUsage: Sendable, Equatable {
         stateImageAllocatedBytes.map(Self.format) ?? "Not created"
     }
 
-    static func current() -> StorageUsage {
-        let paths = BuilderStoragePaths(appSupportRoot: appSupportDirectory())
+    static func current(for builder: BuilderConfig = .defaultBuildKit) -> StorageUsage {
+        let paths = BuilderStoragePaths(
+            appSupportRoot: appSupportDirectory(),
+            builderID: builder.id
+        )
         let base = paths.root
-        let state = paths.buildKitStateImageURL
-        let content = base.appendingPathComponent("content", isDirectory: true)
-        let containers = base.appendingPathComponent("containers", isDirectory: true)
-        let kernels = base.appendingPathComponent("kernels", isDirectory: true)
-        let initfs = base.appendingPathComponent("initfs.ext4")
-        let daemonConfig = Self.daemonConfigURL()
+        let appRoot = appSupportDirectory()
+        let content = appRoot.appendingPathComponent("content", isDirectory: true)
+        let containers = appRoot.appendingPathComponent("containers", isDirectory: true)
+        let kernels = appRoot.appendingPathComponent("kernels", isDirectory: true)
+        let initfs = appRoot.appendingPathComponent("initfs.ext4")
+        let state: URL
+        let stateArea: Area
+        let daemonConfigArea: Area
+        switch builder.kind {
+        case .buildKit:
+            state = paths.buildKitStateImageURL
+            let stateSizes = fileSizes(at: state)
+            stateArea = Area(
+                name: "BuildKit state image",
+                path: state.path,
+                bytes: stateSizes?.allocated,
+                detail: "Persistent ext4 disk mounted at /var/lib/buildkit. Contains cache records, content, snapshots, and build metadata."
+            )
+            let daemonConfig = paths.buildKitDaemonConfigURL
+            daemonConfigArea = Area(
+                name: "BuildKit daemon config",
+                path: daemonConfig.path,
+                bytes: fileSizes(at: daemonConfig)?.allocated,
+                detail: "Generated buildkitd.toml mounted read-only into the guest when custom daemon config is set."
+            )
+        case .docker:
+            state = paths.dockerDataImageURL
+            let stateSizes = fileSizes(at: state)
+            stateArea = Area(
+                name: "Docker data image",
+                path: state.path,
+                bytes: stateSizes?.allocated,
+                detail: "Persistent ext4 disk mounted at /var/lib/docker. Contains Docker images, layers, containers, volumes, and BuildKit data."
+            )
+            let daemonConfig = paths.dockerDaemonConfigURL
+            daemonConfigArea = Area(
+                name: "Docker daemon config",
+                path: daemonConfig.path,
+                bytes: fileSizes(at: daemonConfig)?.allocated,
+                detail: "daemon.json mounted read-only into the guest when custom Docker daemon config is set."
+            )
+        }
 
         let stateSizes = fileSizes(at: state)
 
@@ -54,17 +93,12 @@ struct StorageUsage: Sendable, Equatable {
             stateImageVirtualBytes: stateSizes?.logical,
             stateImageAllocatedBytes: stateSizes?.allocated,
             areas: [
-                Area(
-                    name: "BuildKit state image",
-                    path: state.path,
-                    bytes: stateSizes?.allocated,
-                    detail: "Persistent ext4 disk mounted at /var/lib/buildkit. Contains cache records, content, snapshots, and build metadata."
-                ),
+                stateArea,
                 Area(
                     name: "OCI content store",
                     path: content.path,
                     bytes: directoryAllocatedSize(content),
-                    detail: "Pulled OCI image blobs for moby/buildkit and vminit. Safe to delete only while Crucible is stopped; images will re-pull."
+                    detail: "Pulled OCI image blobs for builder images and vminit. Safe to delete only while Crucible is stopped; images will re-pull."
                 ),
                 Area(
                     name: "Container rootfs workspace",
@@ -84,12 +118,7 @@ struct StorageUsage: Sendable, Equatable {
                     bytes: fileSizes(at: initfs)?.allocated,
                     detail: "vminitd/initfs ext4 image used to start and manage the guest VM."
                 ),
-                Area(
-                    name: "BuildKit daemon config",
-                    path: daemonConfig.path,
-                    bytes: fileSizes(at: daemonConfig)?.allocated,
-                    detail: "Generated buildkitd.toml mounted read-only into the guest when custom daemon config is set."
-                ),
+                daemonConfigArea,
             ]
         )
     }

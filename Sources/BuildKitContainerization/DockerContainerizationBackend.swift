@@ -9,10 +9,10 @@ import SystemPackage
 public actor DockerContainerizationBackend {
     static let containerID = "crucible-docker"
     static let stateImageVersion = "1-journaled-ext4-8g-uncached-fullsync"
+    static let daemonConfigGuestPath = "/etc/docker/daemon.json"
 
     private let settings: DockerSettings
     private let paths: BuilderStoragePaths
-    private let buildKitDefaults = BuildKitSettings()
 
     private var state: DockerDaemonState = .stopped
     private var manager: ContainerManager?
@@ -60,7 +60,7 @@ public actor DockerContainerizationBackend {
 
             progressContinuation.yield(.init(phase: .downloadingKernel, message: "Locating kernel"))
             let progressSink = self.progressContinuation
-            let kernelURL = try await KernelLocator.locateOrDownload(settings: buildKitDefaults) { p in
+            let kernelURL = try await KernelLocator.locateOrDownload(settings: settings.kernelSettings) { p in
                 let msg: String
                 switch p.phase {
                 case .downloading:
@@ -100,7 +100,7 @@ public actor DockerContainerizationBackend {
             progressContinuation.yield(.init(phase: .pullingImage, message: "Pulling init filesystem"))
             var manager = try await ContainerManager(
                 kernel: kernel,
-                initfsReference: buildKitDefaults.initfsReference,
+                initfsReference: settings.initfsReference,
                 imageStore: imageStore,
                 network: try VmnetNetwork(),
                 rosetta: true
@@ -133,9 +133,17 @@ public actor DockerContainerizationBackend {
                     "vzDiskImageSynchronizationMode=full",
                 ]
             )
+            var extraMounts: [Containerization.Mount] = []
+            if let daemonConfigURL = try writeDaemonConfigIfNeeded() {
+                extraMounts.append(Containerization.Mount.share(
+                    source: daemonConfigURL.path,
+                    destination: Self.daemonConfigGuestPath,
+                    options: ["ro"]
+                ))
+            }
 
-            let cpuCount = buildKitDefaults.cpuCount
-            let memoryBytes = UInt64(buildKitDefaults.memoryMiB).mib()
+            let cpuCount = settings.cpuCount
+            let memoryBytes = UInt64(settings.memoryMiB).mib()
 
             let container = try await manager.create(
                 Self.containerID,
@@ -149,6 +157,7 @@ public actor DockerContainerizationBackend {
                 config.useInit = true
                 config.sockets = [socket]
                 config.mounts.append(dataMount)
+                config.mounts.append(contentsOf: extraMounts)
                 config.process.stdout = stdoutWriter
                 config.process.stderr = stderrWriter
             }
@@ -247,6 +256,17 @@ public actor DockerContainerizationBackend {
             )
         }
         lifecycleLockFD = fd
+    }
+
+    private func writeDaemonConfigIfNeeded() throws -> URL? {
+        let config = settings.daemonConfigJSON.trimmingCharacters(in: .whitespacesAndNewlines)
+        let url = paths.dockerDaemonConfigURL
+        if config.isEmpty {
+            try? FileManager.default.removeItem(at: url)
+            return nil
+        }
+        try config.write(to: url, atomically: true, encoding: .utf8)
+        return url
     }
 
     private func releaseLifecycleLock() {

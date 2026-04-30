@@ -388,6 +388,24 @@ struct AppSettingsTests {
         #expect(settings.selectedBuilder == docker)
     }
 
+    @Test func renamingBuilderUpdatesNameOnly() {
+        let docker = BuilderConfig.docker(id: "docker", name: "Docker")
+        let settings = AppSettings(selectedBuilderID: "docker", builders: [.defaultBuildKit, docker])
+            .renamingBuilder(id: "docker", name: " Local Docker ")
+
+        #expect(settings.selectedBuilder.name == "Local Docker")
+        #expect(settings.builders[0] == .defaultBuildKit)
+    }
+
+    @Test func removingBuilderFallsBackSelectionWhenNeeded() {
+        let docker = BuilderConfig.docker(id: "docker", name: "Docker")
+        let settings = AppSettings(selectedBuilderID: "docker", builders: [.defaultBuildKit, docker])
+            .removingBuilder(id: "docker")
+
+        #expect(settings.builders == [.defaultBuildKit])
+        #expect(settings.selectedBuilder == .defaultBuildKit)
+    }
+
     @Test func builderKindCasesRoundTripThroughJSON() throws {
         let settings = AppSettings(
             selectedBuilderID: "docker",
@@ -398,7 +416,13 @@ struct AppSettingsTests {
                     name: "Docker",
                     kind: .docker(DockerSettings(
                         imageReference: "docker.io/library/docker:27-dind",
-                        transportMode: .directH2C
+                        initfsReference: "ghcr.io/apple/containerization/vminit:0.31.0",
+                        cpuCount: 6,
+                        memoryMiB: 8192,
+                        kernelOverridePath: "/tmp/vmlinux",
+                        autoStart: true,
+                        transportMode: .directH2C,
+                        daemonConfigJSON: #"{"debug":true}"#
                     ))
                 ),
             ]
@@ -442,6 +466,31 @@ struct BuilderConfigValidatorTests {
 
         #expect(BuilderConfigValidator.validate(settings).isEmpty)
     }
+
+    @Test func dockerDaemonConfigMustBeJSONObject() {
+        let settings = DockerSettings(daemonConfigJSON: #"["not", "object"]"#)
+
+        #expect(BuilderConfigValidator.validate(settings).contains(.dockerDaemonConfigMalformed("top-level value must be a JSON object")))
+    }
+
+    @Test func dockerDaemonConfigAcceptsValidJSONObject() {
+        let settings = DockerSettings(daemonConfigJSON: #"{"debug":true}"#)
+
+        #expect(BuilderConfigValidator.validate(settings).isEmpty)
+    }
+
+    @Test func dockerResourcesAreValidated() {
+        let settings = DockerSettings(cpuCount: 0, memoryMiB: 128)
+
+        #expect(BuilderConfigValidator.validate(settings).contains(.dockerCPUCountOutOfRange(0)))
+        #expect(BuilderConfigValidator.validate(settings).contains(.dockerMemoryOutOfRange(128)))
+    }
+
+    @Test func dockerInitfsReferenceMustBePlausibleImageReference() {
+        let settings = DockerSettings(initfsReference: "ghcr.io/apple/containerization/vminit")
+
+        #expect(BuilderConfigValidator.validate(settings).contains(.dockerInitfsReferenceMalformed("ghcr.io/apple/containerization/vminit")))
+    }
 }
 
 @Suite("BuilderStoragePaths")
@@ -468,6 +517,7 @@ struct BuilderStoragePathsTests {
         #expect(paths.dockerDataRootURL.path == "/tmp/Crucible/builders/docker/docker-data")
         #expect(paths.dockerDataImageURL.path == "/tmp/Crucible/builders/docker/docker-data.ext4")
         #expect(paths.dockerDataImageVersionURL.path == "/tmp/Crucible/builders/docker/docker-data.version")
+        #expect(paths.dockerDaemonConfigURL.path == "/tmp/Crucible/builders/docker/daemon.json")
     }
 
     @Test func defaultBuildKitSocketMatchesSettingsDefault() {

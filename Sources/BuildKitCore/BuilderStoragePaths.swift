@@ -49,6 +49,10 @@ public struct BuilderStoragePaths: Sendable, Equatable {
         root.appendingPathComponent("docker-data.version")
     }
 
+    public var dockerDaemonConfigURL: URL {
+        root.appendingPathComponent("daemon.json")
+    }
+
     public static func defaultAppSupportRoot() -> URL {
         FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!

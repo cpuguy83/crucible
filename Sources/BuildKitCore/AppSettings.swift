@@ -74,6 +74,24 @@ public struct AppSettings: Sendable, Equatable, Codable {
         return AppSettings(selectedBuilderID: copy.selectedBuilderID, builders: copy.builders, buildxName: copy.buildxName)
     }
 
+    public func renamingBuilder(id: String, name: String) -> AppSettings {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return self }
+        var copy = self
+        guard let index = copy.builders.firstIndex(where: { $0.id == id }) else { return copy }
+        copy.builders[index].name = trimmed
+        return AppSettings(selectedBuilderID: copy.selectedBuilderID, builders: copy.builders, buildxName: copy.buildxName)
+    }
+
+    public func removingBuilder(id: String) -> AppSettings {
+        var remaining = builders.filter { $0.id != id }
+        if remaining.isEmpty {
+            remaining = [.defaultBuildKit]
+        }
+        let selected = selectedBuilderID == id ? remaining[0].id : selectedBuilderID
+        return AppSettings(selectedBuilderID: selected, builders: remaining, buildxName: buildxName)
+    }
+
     public func replacingSelectedBuildKitSettings(_ settings: BuildKitSettings) -> AppSettings {
         var copy = self
         guard let index = copy.builders.firstIndex(where: { $0.id == copy.selectedBuilderID }) else {
@@ -185,6 +203,9 @@ public enum BuilderKind: Sendable, Equatable, Codable {
 }
 
 public struct DockerSettings: Sendable, Equatable, Codable {
+    public static let defaultImageReference = "docker.io/library/docker:dind"
+    public static let defaultInitfsReference = "ghcr.io/apple/containerization/vminit:0.31.0"
+
     public enum BuildKitTransportMode: String, Sendable, Codable {
         case auto
         case directH2C
@@ -192,19 +213,43 @@ public struct DockerSettings: Sendable, Equatable, Codable {
     }
 
     public var imageReference: String
+    public var initfsReference: String
+    public var cpuCount: Int
+    public var memoryMiB: Int
+    public var kernelOverridePath: String?
+    public var autoStart: Bool
     public var transportMode: BuildKitTransportMode
+    public var daemonConfigJSON: String
 
     private enum CodingKeys: String, CodingKey {
         case imageReference
+        case initfsReference
+        case cpuCount
+        case memoryMiB
+        case kernelOverridePath
+        case autoStart
         case transportMode
+        case daemonConfigJSON
     }
 
     public init(
-        imageReference: String = "docker.io/library/docker:dind",
-        transportMode: BuildKitTransportMode = .auto
+        imageReference: String = Self.defaultImageReference,
+        initfsReference: String = Self.defaultInitfsReference,
+        cpuCount: Int = 4,
+        memoryMiB: Int = 4096,
+        kernelOverridePath: String? = nil,
+        autoStart: Bool = false,
+        transportMode: BuildKitTransportMode = .auto,
+        daemonConfigJSON: String = ""
     ) {
         self.imageReference = imageReference
+        self.initfsReference = initfsReference
+        self.cpuCount = cpuCount
+        self.memoryMiB = memoryMiB
+        self.kernelOverridePath = kernelOverridePath
+        self.autoStart = autoStart
         self.transportMode = transportMode
+        self.daemonConfigJSON = daemonConfigJSON
     }
 
     public init(from decoder: Decoder) throws {
@@ -212,7 +257,22 @@ public struct DockerSettings: Sendable, Equatable, Codable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.init(
             imageReference: try c.decodeIfPresent(String.self, forKey: .imageReference) ?? defaults.imageReference,
-            transportMode: try c.decodeIfPresent(BuildKitTransportMode.self, forKey: .transportMode) ?? defaults.transportMode
+            initfsReference: try c.decodeIfPresent(String.self, forKey: .initfsReference) ?? defaults.initfsReference,
+            cpuCount: try c.decodeIfPresent(Int.self, forKey: .cpuCount) ?? defaults.cpuCount,
+            memoryMiB: try c.decodeIfPresent(Int.self, forKey: .memoryMiB) ?? defaults.memoryMiB,
+            kernelOverridePath: try c.decodeIfPresent(String.self, forKey: .kernelOverridePath) ?? defaults.kernelOverridePath,
+            autoStart: try c.decodeIfPresent(Bool.self, forKey: .autoStart) ?? defaults.autoStart,
+            transportMode: try c.decodeIfPresent(BuildKitTransportMode.self, forKey: .transportMode) ?? defaults.transportMode,
+            daemonConfigJSON: try c.decodeIfPresent(String.self, forKey: .daemonConfigJSON) ?? defaults.daemonConfigJSON
+        )
+    }
+
+    public var kernelSettings: BuildKitSettings {
+        BuildKitSettings(
+            initfsReference: initfsReference,
+            cpuCount: cpuCount,
+            memoryMiB: memoryMiB,
+            kernelOverridePath: kernelOverridePath
         )
     }
 }
