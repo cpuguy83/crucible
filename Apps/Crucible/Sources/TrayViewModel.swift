@@ -503,7 +503,7 @@ final class TrayViewModel: ObservableObject {
             var retryDelaySeconds: UInt64 = 1
             while !Task.isCancelled {
                 do {
-                    try await BuildHistoryClient(socketPath: socketPath).watchBuildLogs(ref: ref) { lines in
+                    try await BuildHistoryClient(socketPath: socketPath, transportMode: await self.runtime.buildHistoryTransportMode).watchBuildLogs(ref: ref) { lines in
                         await MainActor.run {
                             if !sawLines {
                                 store.clear()
@@ -562,7 +562,7 @@ final class TrayViewModel: ObservableObject {
                 return
             }
             do {
-                let data = try await BuildHistoryClient(socketPath: socketPath).buildTrace(descriptor)
+                let data = try await BuildHistoryClient(socketPath: socketPath, transportMode: await self.runtime.buildHistoryTransportMode).buildTrace(descriptor)
                 try data.write(to: url, options: .atomic)
                 await MainActor.run {
                     self.logStore.append(source: .supervisor, level: .info, "Exported build trace to \(url.path)")
@@ -586,7 +586,7 @@ final class TrayViewModel: ObservableObject {
                 return
             }
             do {
-                try await BuildHistoryClient(socketPath: socketPath).updateBuildHistory(ref: ref, pinned: pinned)
+                try await BuildHistoryClient(socketPath: socketPath, transportMode: await self.runtime.buildHistoryTransportMode).updateBuildHistory(ref: ref, pinned: pinned)
                 await MainActor.run {
                     self.logStore.append(source: .supervisor, level: .info, "\(pinned ? "Pinned" : "Unpinned") build \(ref)")
                 }
@@ -617,7 +617,7 @@ final class TrayViewModel: ObservableObject {
                 return
             }
             do {
-                try await BuildHistoryClient(socketPath: socketPath).updateBuildHistory(ref: ref, delete: true)
+                try await BuildHistoryClient(socketPath: socketPath, transportMode: await self.runtime.buildHistoryTransportMode).updateBuildHistory(ref: ref, delete: true)
                 await MainActor.run {
                     self.recentBuilds.removeAll { $0.ref == ref }
                     self.logStore.append(source: .supervisor, level: .info, "Deleted build record \(ref)")
@@ -874,7 +874,7 @@ final class TrayViewModel: ObservableObject {
                         }
                         return
                     }
-                    try await BuildHistoryClient(socketPath: socketPath).watchBuildHistory { snapshot in
+                    try await BuildHistoryClient(socketPath: socketPath, transportMode: await self.runtime.buildHistoryTransportMode).watchBuildHistory { snapshot in
                         await MainActor.run {
                             self.activeBuilds = snapshot.active
                             self.recentBuilds = snapshot.recent

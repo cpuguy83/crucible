@@ -84,6 +84,15 @@ struct SelectedBuilderRuntime {
         }
     }
 
+    var buildHistoryTransportMode: BuildHistoryClient.TransportMode {
+        switch implementation {
+        case .buildKit:
+            return .buildKitUnixSocket
+        case .docker:
+            return .dockerDirectH2C
+        }
+    }
+
     func streams() async throws -> (
         state: AsyncStream<BuildKitState>,
         progress: AsyncStream<BuildKitProgress>,
