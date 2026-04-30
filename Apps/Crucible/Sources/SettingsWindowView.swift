@@ -496,14 +496,25 @@ struct SettingsWindowView: View {
             Text("Use the selected Docker builder by pointing Docker-compatible tools at Crucible's Docker socket while the builder is running, or create a Docker context for it.")
                 .foregroundStyle(.secondary)
                 .font(.callout)
-            HStack {
-                Button("Create and Use Context", action: viewModel.createDockerContext)
-                    .disabled(viewModel.dockerEndpoint == nil)
-                Button("Copy DOCKER_HOST env", action: viewModel.copyDockerHostEnv)
-                    .disabled(viewModel.dockerEndpoint == nil)
-                Button("Copy Docker context command", action: viewModel.copyDockerContextCreateCommand)
-                    .disabled(viewModel.dockerEndpoint == nil)
-                Button("Refresh", action: viewModel.refreshDockerIntegrationStatuses)
+            if let message = viewModel.dockerContextBlockedMessage {
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Button(viewModel.dockerContextPrimaryActionTitle, action: viewModel.createDockerContext)
+                        .disabled(viewModel.dockerEndpoint == nil)
+                    Button("Remove Context", action: viewModel.removeDockerContext)
+                        .disabled(viewModel.dockerContextStatus == .notRegistered || viewModel.dockerContextStatus == .dockerNotFound)
+                    Button("Refresh", action: viewModel.refreshDockerIntegrationStatuses)
+                }
+                HStack {
+                    Button("Copy DOCKER_HOST env", action: viewModel.copyDockerHostEnv)
+                        .disabled(viewModel.dockerEndpoint == nil)
+                    Button("Copy Docker context command", action: viewModel.copyDockerContextCreateCommand)
+                        .disabled(viewModel.dockerEndpoint == nil)
+                }
             }
         }
     }
@@ -512,13 +523,21 @@ struct SettingsWindowView: View {
         card("Docker Buildx") {
             metricRow("Builder", viewModel.dockerBuildxBuilderName)
             metricRow("Status", viewModel.dockerBuildxStatus.displayText)
-            Text("Create a docker-container buildx builder that targets the selected Docker builder through Crucible's Docker context.")
+            Text("Create a remote buildx builder that targets the selected Docker builder's managed socket directly.")
                 .foregroundStyle(.secondary)
                 .font(.callout)
-            HStack {
-                Button("Create and Use Buildx Builder", action: viewModel.createDockerBackedBuildxBuilder)
+            if let message = viewModel.dockerBuildxBlockedMessage {
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                Button(viewModel.dockerBuildxPrimaryActionTitle, action: viewModel.createDockerBackedBuildxBuilder)
                     .disabled(viewModel.dockerEndpoint == nil)
+                Button("Remove Buildx Builder", action: viewModel.removeDockerBackedBuildxBuilder)
+                    .disabled(viewModel.dockerBuildxStatus == .notRegistered || viewModel.dockerBuildxStatus == .dockerNotFound)
                 Button("Copy buildx create command", action: viewModel.copyDockerBuildxCreateCommand)
+                    .disabled(viewModel.dockerEndpoint == nil)
             }
             if viewModel.dockerEndpoint == nil {
                 Text("Start the Docker builder to expose its socket.")

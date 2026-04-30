@@ -62,6 +62,8 @@ actor BuildxIntegration {
     enum ContextResult: Sendable {
         case created(contextName: String)
         case alreadyExists(contextName: String)
+        case removed(contextName: String)
+        case notRegistered(contextName: String)
         case dockerNotFound
         case failed(stderr: String, exitCode: Int32)
         case useFailed(stderr: String, exitCode: Int32)
@@ -291,24 +293,38 @@ actor BuildxIntegration {
         return current.stdout.trimmingCharacters(in: .whitespacesAndNewlines) == contextName ? .current : .available
     }
 
+    func removeDockerContext(contextName: String = BuildxCommands.defaultBuilderName) async -> ContextResult {
+        guard let docker = await locateDocker() else { return .dockerNotFound }
+        if let current = await runCapturing(executable: docker, arguments: ["context", "show"]),
+           current.exitCode == 0,
+           current.stdout.trimmingCharacters(in: .whitespacesAndNewlines) == contextName
+        {
+            guard let useDefault = await runCapturing(executable: docker, arguments: BuildxCommands.dockerContextUseArguments(contextName: "default")) else {
+                return .useFailed(stderr: "failed to run docker context use default", exitCode: -1)
+            }
+            if useDefault.exitCode != 0 {
+                return .useFailed(stderr: useDefault.stdout + useDefault.stderr, exitCode: useDefault.exitCode)
+            }
+        }
+        guard let output = await runCapturing(
+            executable: docker,
+            arguments: BuildxCommands.dockerContextRemoveArguments(contextName: contextName)
+        ) else { return .failed(stderr: "failed to run docker context rm", exitCode: -1) }
+        let combined = output.stdout + output.stderr
+        if output.exitCode == 0 {
+            return .removed(contextName: contextName)
+        }
+        if combined.contains("not found") || combined.contains("does not exist") || combined.contains("No context") {
+            return .notRegistered(contextName: contextName)
+        }
+        return .failed(stderr: combined, exitCode: output.exitCode)
+    }
+
     func installDockerBackedBuildx(
         endpoint: BuildKitEndpoint,
         builderName: String = BuildxCommands.defaultBuilderName,
-        contextName: String = BuildxCommands.defaultBuilderName,
         useAsDefault: Bool = true
     ) async -> InstallResult {
-        let contextResult = await installDockerContext(endpoint: endpoint, contextName: contextName, useAsDefault: false)
-        switch contextResult {
-        case .created, .alreadyExists:
-            break
-        case .dockerNotFound:
-            return .dockerNotFound
-        case .failed(let stderr, let exitCode):
-            return .failed(stderr: stderr, exitCode: exitCode)
-        case .useFailed(let stderr, let exitCode):
-            return .useFailed(stderr: stderr, exitCode: exitCode)
-        }
-
         guard let docker = await locateDocker() else { return .dockerNotFound }
         let inspect = await runCapturing(
             executable: docker,
@@ -327,7 +343,7 @@ actor BuildxIntegration {
 
         let create = await runCapturing(
             executable: docker,
-            arguments: BuildxCommands.dockerBuildxCreateDockerArguments(builderName: builderName, contextName: contextName)
+            arguments: BuildxCommands.dockerBuildxCreateArguments(for: endpoint, builderName: builderName)
         )
         guard let create, create.exitCode == 0 else {
             return .failed(stderr: create?.stderr ?? "no output", exitCode: create?.exitCode ?? -1)

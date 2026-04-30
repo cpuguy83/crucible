@@ -36,15 +36,19 @@ public enum BuildxCommands {
         "BUILDKIT_HOST='\(unixURL(for: endpoint))'"
     }
 
+    public static func rawUnixURL(for endpoint: BuildKitEndpoint) -> String {
+        "unix://\(endpoint.socketPath)"
+    }
+
     public static func dockerHostEnv(for endpoint: BuildKitEndpoint) -> String {
-        "DOCKER_HOST='\(unixURL(for: endpoint))'"
+        "DOCKER_HOST='\(rawUnixURL(for: endpoint))'"
     }
 
     public static func dockerContextCreateCommand(
         for endpoint: BuildKitEndpoint,
         contextName: String = BuildxCommands.defaultBuilderName
     ) -> String {
-        "docker context create \(contextName) --docker 'host=\(unixURL(for: endpoint))'"
+        "docker context create \(contextName) --docker 'host=\(rawUnixURL(for: endpoint))'"
     }
 
     public static func dockerContextCreateArguments(
@@ -66,7 +70,7 @@ public enum BuildxCommands {
     }
 
     public static func dockerContextRemoveArguments(contextName: String = BuildxCommands.defaultBuilderName) -> [String] {
-        ["context", "rm", contextName]
+        ["context", "rm", "--force", contextName]
     }
 
     /// `docker buildx create ...` invocation as a single shell line.
@@ -99,30 +103,6 @@ public enum BuildxCommands {
             "--name", builderName,
             "--driver", "remote",
             "unix://\(endpoint.socketPath)",
-        ]
-    }
-
-    public static func dockerBuildxCreateDockerCommand(
-        builderName: String = BuildxCommands.defaultBuilderName,
-        contextName: String = BuildxCommands.defaultBuilderName,
-        useAfterCreate: Bool = true
-    ) -> String {
-        var line = "docker buildx create --name \(builderName) --driver docker-container \(contextName)"
-        if useAfterCreate {
-            line += " && docker buildx use \(builderName)"
-        }
-        return line
-    }
-
-    public static func dockerBuildxCreateDockerArguments(
-        builderName: String = BuildxCommands.defaultBuilderName,
-        contextName: String = BuildxCommands.defaultBuilderName
-    ) -> [String] {
-        [
-            "buildx", "create",
-            "--name", builderName,
-            "--driver", "docker-container",
-            contextName,
         ]
     }
 

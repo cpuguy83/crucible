@@ -178,6 +178,40 @@ final class TrayViewModel: ObservableObject {
 
     var dockerBuildxBuilderName: String { dockerIntegrationName }
 
+    var dockerContextIsActiveIntegration: Bool {
+        switch dockerContextStatus {
+        case .available, .current:
+            return true
+        case .unknown, .dockerNotFound, .notRegistered, .failed:
+            return false
+        }
+    }
+
+    var dockerBuildxIsActiveIntegration: Bool {
+        switch dockerBuildxStatus {
+        case .running, .inactive:
+            return true
+        case .unknown, .dockerNotFound, .notRegistered, .failed:
+            return false
+        }
+    }
+
+    var dockerContextBlockedMessage: String? {
+        dockerBuildxIsActiveIntegration ? "The Docker buildx builder is registered. Switch to Docker context to remove it and use the context integration instead." : nil
+    }
+
+    var dockerBuildxBlockedMessage: String? {
+        dockerContextIsActiveIntegration ? "The Docker context is registered. Switch to buildx to remove it and use the buildx integration instead." : nil
+    }
+
+    var dockerContextPrimaryActionTitle: String {
+        dockerBuildxIsActiveIntegration ? "Switch to Context" : "Create and Use Context"
+    }
+
+    var dockerBuildxPrimaryActionTitle: String {
+        dockerContextIsActiveIntegration ? "Switch to Buildx Builder" : "Create and Use Buildx Builder"
+    }
+
     private var dockerIntegrationName: String {
         let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_."))
         let suffix = String(appSettings.selectedBuilder.id.unicodeScalars.map { allowed.contains($0) ? Character($0) : "-" })
@@ -1117,9 +1151,10 @@ final class TrayViewModel: ObservableObject {
     }
 
     func copyDockerBuildxCreateCommand() {
-        copyToPasteboard(BuildxCommands.dockerBuildxCreateDockerCommand(
-            builderName: dockerBuildxBuilderName,
-            contextName: dockerContextName
+        guard let ep = dockerEndpoint else { return }
+        copyToPasteboard(BuildxCommands.dockerBuildxCreateCommand(
+            for: BuildKitEndpoint(socketPath: ep.socketPath),
+            builderName: dockerBuildxBuilderName
         ))
         logStore.append(source: .buildx, level: .info, "Copied Docker-backed buildx create command")
     }
@@ -1128,7 +1163,9 @@ final class TrayViewModel: ObservableObject {
         guard let ep = dockerEndpoint else { return }
         let endpoint = BuildKitEndpoint(socketPath: ep.socketPath)
         let contextName = dockerContextName
+        let builderName = dockerBuildxBuilderName
         Task { [buildx] in
+            _ = await buildx.remove(builderName: builderName)
             let result = await buildx.installDockerContext(endpoint: endpoint, contextName: contextName)
             await MainActor.run {
                 switch result {
@@ -1138,6 +1175,9 @@ final class TrayViewModel: ObservableObject {
                 case .alreadyExists(let name):
                     self.lastError = nil
                     self.logStore.append(source: .buildx, level: .info, "Docker context '\(name)' already exists (set as default)")
+                case .removed, .notRegistered:
+                    self.lastError = "docker context create returned an unexpected result."
+                    self.logStore.append(source: .buildx, level: .error, self.lastError ?? "")
                 case .dockerNotFound:
                     self.lastError = "docker not found. Install Docker CLI, or copy the command and run it in a shell."
                     self.logStore.append(source: .buildx, level: .error, self.lastError ?? "")
@@ -1153,13 +1193,41 @@ final class TrayViewModel: ObservableObject {
         }
     }
 
+    func removeDockerContext() {
+        let contextName = dockerContextName
+        Task { [buildx] in
+            let result = await buildx.removeDockerContext(contextName: contextName)
+            await MainActor.run {
+                switch result {
+                case .removed(let name):
+                    self.lastError = nil
+                    self.logStore.append(source: .buildx, level: .info, "Removed Docker context '\(name)'")
+                case .notRegistered(let name):
+                    self.lastError = nil
+                    self.logStore.append(source: .buildx, level: .info, "Docker context '\(name)' is not registered")
+                case .dockerNotFound:
+                    self.lastError = "docker not found."
+                    self.logStore.append(source: .buildx, level: .error, self.lastError ?? "")
+                case .failed(let stderr, let code):
+                    self.lastError = "docker context rm failed (exit \(code)):\n\(stderr)"
+                    self.logStore.append(source: .buildx, level: .error, self.lastError ?? "")
+                case .created, .alreadyExists, .useFailed:
+                    self.lastError = "docker context rm returned an unexpected result."
+                    self.logStore.append(source: .buildx, level: .error, self.lastError ?? "")
+                }
+            }
+            self.refreshDockerIntegrationStatuses()
+        }
+    }
+
     func createDockerBackedBuildxBuilder() {
         guard let ep = dockerEndpoint else { return }
         let endpoint = BuildKitEndpoint(socketPath: ep.socketPath)
         let builderName = dockerBuildxBuilderName
         let contextName = dockerContextName
         Task { [buildx] in
-            let result = await buildx.installDockerBackedBuildx(endpoint: endpoint, builderName: builderName, contextName: contextName)
+            _ = await buildx.removeDockerContext(contextName: contextName)
+            let result = await buildx.installDockerBackedBuildx(endpoint: endpoint, builderName: builderName)
             await MainActor.run {
                 switch result {
                 case .created(let name):
@@ -1176,6 +1244,30 @@ final class TrayViewModel: ObservableObject {
                     self.logStore.append(source: .buildx, level: .error, self.lastError ?? "")
                 case .useFailed(let stderr, let code):
                     self.lastError = "docker buildx use failed (exit \(code)):\n\(stderr)"
+                    self.logStore.append(source: .buildx, level: .error, self.lastError ?? "")
+                }
+            }
+            self.refreshDockerIntegrationStatuses()
+        }
+    }
+
+    func removeDockerBackedBuildxBuilder() {
+        let builderName = dockerBuildxBuilderName
+        Task { [buildx] in
+            let result = await buildx.remove(builderName: builderName)
+            await MainActor.run {
+                switch result {
+                case .removed(let name):
+                    self.lastError = nil
+                    self.logStore.append(source: .buildx, level: .info, "Removed Docker-backed buildx builder '\(name)'")
+                case .notRegistered(let name):
+                    self.lastError = nil
+                    self.logStore.append(source: .buildx, level: .info, "Docker-backed buildx builder '\(name)' is not registered")
+                case .dockerNotFound:
+                    self.lastError = "docker not found."
+                    self.logStore.append(source: .buildx, level: .error, self.lastError ?? "")
+                case .failed(let stderr, let code):
+                    self.lastError = "docker buildx rm failed (exit \(code)):\n\(stderr)"
                     self.logStore.append(source: .buildx, level: .error, self.lastError ?? "")
                 }
             }

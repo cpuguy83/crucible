@@ -20,7 +20,12 @@ struct BuildxCommandsTests {
 
     @Test func dockerContextCommandUsesDockerHost() {
         let cmd = BuildxCommands.dockerContextCreateCommand(for: endpoint, contextName: "crucible")
-        #expect(cmd == "docker context create crucible --docker 'host=unix:///Users/me/Library/Application%20Support/Crucible/buildkitd.sock'")
+        #expect(cmd == "docker context create crucible --docker 'host=unix:///Users/me/Library/Application Support/Crucible/buildkitd.sock'")
+    }
+
+    @Test func dockerHostEnvKeepsRawSocketPath() {
+        let line = BuildxCommands.dockerHostEnv(for: endpoint)
+        #expect(line == "DOCKER_HOST='unix:///Users/me/Library/Application Support/Crucible/buildkitd.sock'")
     }
 
     @Test func dockerContextArgumentsKeepRawPath() {
@@ -66,18 +71,9 @@ struct BuildxCommandsTests {
         ])
     }
 
-    @Test func dockerBuildxBuilderUsesDockerContainerDriverAndContext() {
-        let args = BuildxCommands.dockerBuildxCreateDockerArguments(builderName: "crucible", contextName: "crucible")
-        #expect(args == [
-            "buildx", "create",
-            "--name", "crucible",
-            "--driver", "docker-container",
-            "crucible",
-        ])
-    }
-
     @Test func removeAndInspectArgumentsAreSimple() {
         #expect(BuildxCommands.dockerBuildxRemoveArguments() == ["buildx", "rm", "crucible"])
         #expect(BuildxCommands.dockerBuildxInspectArguments(builderName: "x") == ["buildx", "inspect", "x"])
+        #expect(BuildxCommands.dockerContextRemoveArguments(contextName: "crucible-docker") == ["context", "rm", "--force", "crucible-docker"])
     }
 }
