@@ -27,12 +27,12 @@ struct TrayMenu: View {
         Button("Open Logs…", action: viewModel.openLogsWindow)
         Button("Settings…", action: viewModel.openSettingsWindow)
 
-        if let ep = viewModel.endpoint {
+        if let socketPath = viewModel.displayedSocketPath {
             Divider()
-            Button("Copy socket path") {
+            Button("Copy \(viewModel.endpointLabel) path") {
                 let pb = NSPasteboard.general
                 pb.clearContents()
-                pb.setString(ep.socketPath, forType: .string)
+                pb.setString(socketPath, forType: .string)
             }
         }
 

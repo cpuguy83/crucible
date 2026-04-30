@@ -12,12 +12,12 @@ public struct AppSettings: Sendable, Equatable, Codable {
     }
 
     public init(
-        selectedBuilderID: String = BuilderConfig.defaultManagedID,
-        builders: [BuilderConfig] = [.defaultManaged],
+        selectedBuilderID: String = BuilderConfig.defaultBuildKitID,
+        builders: [BuilderConfig] = [.defaultBuildKit],
         buildxName: String = BuildxCommands.defaultBuilderName
     ) {
         self.selectedBuilderID = selectedBuilderID
-        self.builders = builders.isEmpty ? [.defaultManaged] : builders
+        self.builders = builders.isEmpty ? [.defaultBuildKit] : builders
         self.buildxName = BuildxCommands.isValidBuilderName(buildxName) ? buildxName : BuildxCommands.defaultBuilderName
         if !self.builders.contains(where: { $0.id == self.selectedBuilderID }) {
             self.selectedBuilderID = self.builders[0].id
@@ -27,8 +27,8 @@ public struct AppSettings: Sendable, Equatable, Codable {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.init(
-            selectedBuilderID: try c.decodeIfPresent(String.self, forKey: .selectedBuilderID) ?? BuilderConfig.defaultManagedID,
-            builders: try c.decodeIfPresent([BuilderConfig].self, forKey: .builders) ?? [.defaultManaged],
+            selectedBuilderID: try c.decodeIfPresent(String.self, forKey: .selectedBuilderID) ?? BuilderConfig.defaultBuildKitID,
+            builders: try c.decodeIfPresent([BuilderConfig].self, forKey: .builders) ?? [.defaultBuildKit],
             buildxName: try c.decodeIfPresent(String.self, forKey: .buildxName) ?? BuildxCommands.defaultBuilderName
         )
     }
@@ -37,34 +37,92 @@ public struct AppSettings: Sendable, Equatable, Codable {
         builders.first { $0.id == selectedBuilderID } ?? builders[0]
     }
 
-    public var selectedManagedSettings: BuildKitSettings {
-        guard case .managedBuildKit(let settings) = selectedBuilder.kind else {
+    public var selectedBuildKitSettings: BuildKitSettings {
+        guard case .buildKit(let settings) = selectedBuilder.kind else {
             return BuildKitSettings()
         }
         return settings
     }
 
-    public var selectedBuilderIsManaged: Bool { selectedBuilder.isManagedBuildKit }
+    public var selectedBuilderIsBuildKit: Bool { selectedBuilder.isBuildKit }
 
-    public func replacingSelectedManagedSettings(_ settings: BuildKitSettings) -> AppSettings {
+    public var selectedDockerSettings: DockerSettings {
+        guard case .docker(let settings) = selectedBuilder.kind else {
+            return DockerSettings()
+        }
+        return settings
+    }
+
+    public func selectingBuilder(id: String) -> AppSettings {
+        AppSettings(
+            selectedBuilderID: id,
+            builders: builders,
+            buildxName: buildxName
+        )
+    }
+
+    public func upsertingBuilder(_ builder: BuilderConfig, select: Bool = false) -> AppSettings {
+        var copy = self
+        if let index = copy.builders.firstIndex(where: { $0.id == builder.id }) {
+            copy.builders[index] = builder
+        } else {
+            copy.builders.append(builder)
+        }
+        if select {
+            copy.selectedBuilderID = builder.id
+        }
+        return AppSettings(selectedBuilderID: copy.selectedBuilderID, builders: copy.builders, buildxName: copy.buildxName)
+    }
+
+    public func renamingBuilder(id: String, name: String) -> AppSettings {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return self }
+        var copy = self
+        guard let index = copy.builders.firstIndex(where: { $0.id == id }) else { return copy }
+        copy.builders[index].name = trimmed
+        return AppSettings(selectedBuilderID: copy.selectedBuilderID, builders: copy.builders, buildxName: copy.buildxName)
+    }
+
+    public func removingBuilder(id: String) -> AppSettings {
+        var remaining = builders.filter { $0.id != id }
+        if remaining.isEmpty {
+            remaining = [.defaultBuildKit]
+        }
+        let selected = selectedBuilderID == id ? remaining[0].id : selectedBuilderID
+        return AppSettings(selectedBuilderID: selected, builders: remaining, buildxName: buildxName)
+    }
+
+    public func replacingSelectedBuildKitSettings(_ settings: BuildKitSettings) -> AppSettings {
         var copy = self
         guard let index = copy.builders.firstIndex(where: { $0.id == copy.selectedBuilderID }) else {
             return copy
         }
-        guard case .managedBuildKit = copy.builders[index].kind else {
+        guard case .buildKit = copy.builders[index].kind else {
             return copy
         }
-        copy.builders[index].kind = .managedBuildKit(settings)
+        copy.builders[index].kind = .buildKit(settings)
+        return copy
+    }
+
+    public func replacingSelectedDockerSettings(_ settings: DockerSettings) -> AppSettings {
+        var copy = self
+        guard let index = copy.builders.firstIndex(where: { $0.id == copy.selectedBuilderID }) else {
+            return copy
+        }
+        guard case .docker = copy.builders[index].kind else {
+            return copy
+        }
+        copy.builders[index].kind = .docker(settings)
         return copy
     }
 
     public static func migrating(_ settings: BuildKitSettings) -> AppSettings {
-        AppSettings(builders: [.managed(id: BuilderConfig.defaultManagedID, name: "Crucible", settings: settings)])
+        AppSettings(builders: [.buildKit(id: BuilderConfig.defaultBuildKitID, name: "Crucible", settings: settings)])
     }
 }
 
 public struct BuilderConfig: Sendable, Equatable, Codable, Identifiable {
-    public static let defaultManagedID = "crucible"
+    public static let defaultBuildKitID = "crucible"
 
     public var id: String
     public var name: String
@@ -76,63 +134,78 @@ public struct BuilderConfig: Sendable, Equatable, Codable, Identifiable {
         self.kind = kind
     }
 
-    public var isManagedBuildKit: Bool { kind.isManagedBuildKit }
+    public var isBuildKit: Bool { kind.isBuildKit }
 
-    public static let `defaultManaged` = BuilderConfig(
-        id: defaultManagedID,
+    public static let defaultBuildKit = BuilderConfig(
+        id: defaultBuildKitID,
         name: "Crucible",
-        kind: .managedBuildKit(BuildKitSettings())
+        kind: .buildKit(BuildKitSettings())
     )
 
-    public static func managed(id: String, name: String, settings: BuildKitSettings) -> BuilderConfig {
-        BuilderConfig(id: id, name: name, kind: .managedBuildKit(settings))
+    public static func buildKit(id: String, name: String, settings: BuildKitSettings) -> BuilderConfig {
+        BuilderConfig(id: id, name: name, kind: .buildKit(settings))
+    }
+
+    public static func docker(id: String, name: String, settings: DockerSettings = DockerSettings()) -> BuilderConfig {
+        BuilderConfig(id: id, name: name, kind: .docker(settings))
     }
 }
 
 public enum BuilderKind: Sendable, Equatable, Codable {
-    case managedBuildKit(BuildKitSettings)
-    case managedDocker(ManagedDockerSettings)
+    case buildKit(BuildKitSettings)
+    case docker(DockerSettings)
 
     private enum CodingKeys: String, CodingKey {
         case type
+        case buildKit
+        case docker
         case managedBuildKit
         case managedDocker
     }
 
     private enum KindType: String, Codable {
+        case buildKit
+        case docker
         case managedBuildKit
         case managedDocker
     }
 
-    public var isManagedBuildKit: Bool {
-        if case .managedBuildKit = self { return true }
+    public var isBuildKit: Bool {
+        if case .buildKit = self { return true }
         return false
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         switch try c.decode(KindType.self, forKey: .type) {
+        case .buildKit:
+            self = .buildKit(try c.decode(BuildKitSettings.self, forKey: .buildKit))
         case .managedBuildKit:
-            self = .managedBuildKit(try c.decode(BuildKitSettings.self, forKey: .managedBuildKit))
+            self = .buildKit(try c.decode(BuildKitSettings.self, forKey: .managedBuildKit))
+        case .docker:
+            self = .docker(try c.decode(DockerSettings.self, forKey: .docker))
         case .managedDocker:
-            self = .managedDocker(try c.decode(ManagedDockerSettings.self, forKey: .managedDocker))
+            self = .docker(try c.decode(DockerSettings.self, forKey: .managedDocker))
         }
     }
 
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         switch self {
-        case .managedBuildKit(let settings):
-            try c.encode(KindType.managedBuildKit, forKey: .type)
-            try c.encode(settings, forKey: .managedBuildKit)
-        case .managedDocker(let settings):
-            try c.encode(KindType.managedDocker, forKey: .type)
-            try c.encode(settings, forKey: .managedDocker)
+        case .buildKit(let settings):
+            try c.encode(KindType.buildKit, forKey: .type)
+            try c.encode(settings, forKey: .buildKit)
+        case .docker(let settings):
+            try c.encode(KindType.docker, forKey: .type)
+            try c.encode(settings, forKey: .docker)
         }
     }
 }
 
-public struct ManagedDockerSettings: Sendable, Equatable, Codable {
+public struct DockerSettings: Sendable, Equatable, Codable {
+    public static let defaultImageReference = "docker.io/library/docker:dind"
+    public static let defaultInitfsReference = "ghcr.io/apple/containerization/vminit:0.31.0"
+
     public enum BuildKitTransportMode: String, Sendable, Codable {
         case auto
         case directH2C
@@ -140,13 +213,66 @@ public struct ManagedDockerSettings: Sendable, Equatable, Codable {
     }
 
     public var imageReference: String
+    public var initfsReference: String
+    public var cpuCount: Int
+    public var memoryMiB: Int
+    public var kernelOverridePath: String?
+    public var autoStart: Bool
     public var transportMode: BuildKitTransportMode
+    public var daemonConfigJSON: String
+
+    private enum CodingKeys: String, CodingKey {
+        case imageReference
+        case initfsReference
+        case cpuCount
+        case memoryMiB
+        case kernelOverridePath
+        case autoStart
+        case transportMode
+        case daemonConfigJSON
+    }
 
     public init(
-        imageReference: String = "docker.io/library/docker:dind",
-        transportMode: BuildKitTransportMode = .auto
+        imageReference: String = Self.defaultImageReference,
+        initfsReference: String = Self.defaultInitfsReference,
+        cpuCount: Int = 4,
+        memoryMiB: Int = 4096,
+        kernelOverridePath: String? = nil,
+        autoStart: Bool = false,
+        transportMode: BuildKitTransportMode = .auto,
+        daemonConfigJSON: String = ""
     ) {
         self.imageReference = imageReference
+        self.initfsReference = initfsReference
+        self.cpuCount = cpuCount
+        self.memoryMiB = memoryMiB
+        self.kernelOverridePath = kernelOverridePath
+        self.autoStart = autoStart
         self.transportMode = transportMode
+        self.daemonConfigJSON = daemonConfigJSON
+    }
+
+    public init(from decoder: Decoder) throws {
+        let defaults = DockerSettings()
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            imageReference: try c.decodeIfPresent(String.self, forKey: .imageReference) ?? defaults.imageReference,
+            initfsReference: try c.decodeIfPresent(String.self, forKey: .initfsReference) ?? defaults.initfsReference,
+            cpuCount: try c.decodeIfPresent(Int.self, forKey: .cpuCount) ?? defaults.cpuCount,
+            memoryMiB: try c.decodeIfPresent(Int.self, forKey: .memoryMiB) ?? defaults.memoryMiB,
+            kernelOverridePath: try c.decodeIfPresent(String.self, forKey: .kernelOverridePath) ?? defaults.kernelOverridePath,
+            autoStart: try c.decodeIfPresent(Bool.self, forKey: .autoStart) ?? defaults.autoStart,
+            transportMode: try c.decodeIfPresent(BuildKitTransportMode.self, forKey: .transportMode) ?? defaults.transportMode,
+            daemonConfigJSON: try c.decodeIfPresent(String.self, forKey: .daemonConfigJSON) ?? defaults.daemonConfigJSON
+        )
+    }
+
+    public var kernelSettings: BuildKitSettings {
+        BuildKitSettings(
+            initfsReference: initfsReference,
+            cpuCount: cpuCount,
+            memoryMiB: memoryMiB,
+            kernelOverridePath: kernelOverridePath
+        )
     }
 }

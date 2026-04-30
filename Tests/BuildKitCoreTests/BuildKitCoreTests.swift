@@ -262,34 +262,34 @@ struct SettingsValidatorTests {
 
 @Suite("AppSettings")
 struct AppSettingsTests {
-    @Test func defaultsUseSingleCrucibleManagedBuilder() {
+    @Test func defaultsUseSingleCrucibleBuildKitBuilder() {
         let settings = AppSettings()
 
-        #expect(settings.selectedBuilderID == BuilderConfig.defaultManagedID)
+        #expect(settings.selectedBuilderID == BuilderConfig.defaultBuildKitID)
         #expect(settings.builders.count == 1)
         #expect(settings.selectedBuilder.name == "Crucible")
         #expect(settings.buildxName == BuildxCommands.defaultBuilderName)
-        #expect(settings.selectedManagedSettings == BuildKitSettings())
+        #expect(settings.selectedBuildKitSettings == BuildKitSettings())
     }
 
-    @Test func emptyBuildersFallBackToDefaultManagedBuilder() {
+    @Test func emptyBuildersFallBackToDefaultBuildKitBuilder() {
         let settings = AppSettings(selectedBuilderID: "missing", builders: [])
 
-        #expect(settings.selectedBuilderID == BuilderConfig.defaultManagedID)
-        #expect(settings.builders == [.defaultManaged])
+        #expect(settings.selectedBuilderID == BuilderConfig.defaultBuildKitID)
+        #expect(settings.builders == [.defaultBuildKit])
     }
 
     @Test func missingSelectedBuilderFallsBackToFirstBuilder() {
         let settings = AppSettings(
             selectedBuilderID: "missing",
-            builders: [BuilderConfig.managed(id: "custom", name: "Custom", settings: BuildKitSettings())]
+            builders: [BuilderConfig.buildKit(id: "custom", name: "Custom", settings: BuildKitSettings())]
         )
 
         #expect(settings.selectedBuilderID == "custom")
         #expect(settings.selectedBuilder.name == "Custom")
     }
 
-    @Test func migratingLegacySettingsPreservesManagedFields() {
+    @Test func migratingLegacySettingsPreservesBuildKitFields() {
         var legacy = BuildKitSettings()
         legacy.backend = .containerCLI
         legacy.imageReference = "docker.io/moby/buildkit:v0.13.2"
@@ -300,11 +300,11 @@ struct AppSettingsTests {
 
         let settings = AppSettings.migrating(legacy)
 
-        #expect(settings.selectedBuilderID == BuilderConfig.defaultManagedID)
+        #expect(settings.selectedBuilderID == BuilderConfig.defaultBuildKitID)
         #expect(settings.builders.count == 1)
         #expect(settings.selectedBuilder.name == "Crucible")
         #expect(settings.buildxName == BuildxCommands.defaultBuilderName)
-        #expect(settings.selectedManagedSettings == legacy)
+        #expect(settings.selectedBuildKitSettings == legacy)
     }
 
     @Test func buildxNameBelongsToAppSettingsNotSavedBuilders() {
@@ -315,10 +315,17 @@ struct AppSettingsTests {
     }
 
     @Test func missingBuildxNameDecodesToStableDefault() throws {
-        let json = #"{"selectedBuilderID":"crucible","builders":[{"id":"crucible","name":"Crucible","kind":{"type":"managedBuildKit","managedBuildKit":{}}}]}"#
+        let json = #"{"selectedBuilderID":"crucible","builders":[{"id":"crucible","name":"Crucible","kind":{"type":"buildKit","buildKit":{}}}]}"#
         let settings = try JSONDecoder().decode(AppSettings.self, from: Data(json.utf8))
 
         #expect(settings.buildxName == BuildxCommands.defaultBuilderName)
+    }
+
+    @Test func legacyManagedBuilderKindNamesDecode() throws {
+        let json = #"{"selectedBuilderID":"docker","builders":[{"id":"crucible","name":"Crucible","kind":{"type":"managedBuildKit","managedBuildKit":{}}},{"id":"docker","name":"Docker","kind":{"type":"managedDocker","managedDocker":{"imageReference":"docker.io/library/docker:dind"}}}]}"#
+        let settings = try JSONDecoder().decode(AppSettings.self, from: Data(json.utf8))
+
+        #expect(settings.selectedBuilder.kind == .docker(DockerSettings()))
     }
 
     @Test func invalidBuildxNameFallsBackToStableDefault() {
@@ -327,54 +334,95 @@ struct AppSettingsTests {
         #expect(settings.buildxName == BuildxCommands.defaultBuilderName)
     }
 
-    @Test func replacingSelectedManagedSettingsUpdatesOnlySelectedBuilder() {
+    @Test func replacingSelectedBuildKitSettingsUpdatesOnlySelectedBuilder() {
         var replacement = BuildKitSettings()
         replacement.imageReference = "docker.io/moby/buildkit:v0.14.0"
 
         let other = BuilderConfig(
             id: "docker",
             name: "Docker",
-            kind: .managedDocker(ManagedDockerSettings())
+            kind: .docker(DockerSettings())
         )
-        let settings = AppSettings(builders: [.defaultManaged, other])
-            .replacingSelectedManagedSettings(replacement)
+        let settings = AppSettings(builders: [.defaultBuildKit, other])
+            .replacingSelectedBuildKitSettings(replacement)
 
-        #expect(settings.selectedManagedSettings == replacement)
+        #expect(settings.selectedBuildKitSettings == replacement)
         #expect(settings.builders[1] == other)
     }
 
-    @Test func replacingSelectedManagedSettingsIgnoresManagedDockerSelection() {
+    @Test func replacingSelectedBuildKitSettingsIgnoresDockerSelection() {
         let docker = BuilderConfig(
             id: "docker",
             name: "Docker",
-            kind: .managedDocker(ManagedDockerSettings())
+            kind: .docker(DockerSettings())
         )
         var replacement = BuildKitSettings()
         replacement.imageReference = "docker.io/moby/buildkit:v0.14.0"
-        let settings = AppSettings(selectedBuilderID: "docker", builders: [.defaultManaged, docker])
-            .replacingSelectedManagedSettings(replacement)
+        let settings = AppSettings(selectedBuilderID: "docker", builders: [.defaultBuildKit, docker])
+            .replacingSelectedBuildKitSettings(replacement)
 
         #expect(settings.selectedBuilder == docker)
-        #expect(settings.builders[0] == .defaultManaged)
+        #expect(settings.builders[0] == .defaultBuildKit)
     }
 
-    @Test func selectedManagedBuildKitBuilderIsManaged() {
+    @Test func selectedBuildKitBuilderIsBuildKit() {
         let settings = AppSettings()
 
-        #expect(settings.selectedBuilderIsManaged)
+        #expect(settings.selectedBuilderIsBuildKit)
+    }
+
+    @Test func selectingBuilderUpdatesSelectedBuilderID() {
+        let docker = BuilderConfig.docker(id: "docker", name: "Docker")
+        let settings = AppSettings(builders: [.defaultBuildKit, docker])
+            .selectingBuilder(id: "docker")
+
+        #expect(settings.selectedBuilder == docker)
+        #expect(settings.selectedDockerSettings == DockerSettings())
+    }
+
+    @Test func upsertingBuilderAddsAndCanSelectBuilder() {
+        let docker = BuilderConfig.docker(id: "docker", name: "Docker")
+        let settings = AppSettings().upsertingBuilder(docker, select: true)
+
+        #expect(settings.builders == [.defaultBuildKit, docker])
+        #expect(settings.selectedBuilder == docker)
+    }
+
+    @Test func renamingBuilderUpdatesNameOnly() {
+        let docker = BuilderConfig.docker(id: "docker", name: "Docker")
+        let settings = AppSettings(selectedBuilderID: "docker", builders: [.defaultBuildKit, docker])
+            .renamingBuilder(id: "docker", name: " Local Docker ")
+
+        #expect(settings.selectedBuilder.name == "Local Docker")
+        #expect(settings.builders[0] == .defaultBuildKit)
+    }
+
+    @Test func removingBuilderFallsBackSelectionWhenNeeded() {
+        let docker = BuilderConfig.docker(id: "docker", name: "Docker")
+        let settings = AppSettings(selectedBuilderID: "docker", builders: [.defaultBuildKit, docker])
+            .removingBuilder(id: "docker")
+
+        #expect(settings.builders == [.defaultBuildKit])
+        #expect(settings.selectedBuilder == .defaultBuildKit)
     }
 
     @Test func builderKindCasesRoundTripThroughJSON() throws {
         let settings = AppSettings(
             selectedBuilderID: "docker",
             builders: [
-                .defaultManaged,
+                .defaultBuildKit,
                 BuilderConfig(
                     id: "docker",
                     name: "Docker",
-                    kind: .managedDocker(ManagedDockerSettings(
+                    kind: .docker(DockerSettings(
                         imageReference: "docker.io/library/docker:27-dind",
-                        transportMode: .directH2C
+                        initfsReference: "ghcr.io/apple/containerization/vminit:0.31.0",
+                        cpuCount: 6,
+                        memoryMiB: 8192,
+                        kernelOverridePath: "/tmp/vmlinux",
+                        autoStart: true,
+                        transportMode: .directH2C,
+                        daemonConfigJSON: #"{"debug":true}"#
                     ))
                 ),
             ]
@@ -384,6 +432,96 @@ struct AppSettingsTests {
         let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
 
         #expect(decoded == settings)
+    }
+}
+
+@Suite("BuilderConfigValidator")
+struct BuilderConfigValidatorTests {
+    @Test func buildKitValidationReusesBuildKitSettingsValidation() {
+        var settings = BuildKitSettings()
+        settings.imageReference = ""
+        let builder = BuilderConfig.buildKit(id: "buildkit", name: "BuildKit", settings: settings)
+
+        #expect(BuilderConfigValidator.validate(builder) == [.buildKit(.imageReferenceEmpty)])
+    }
+
+    @Test func dockerDefaultsAreValid() {
+        #expect(BuilderConfigValidator.validate(DockerSettings()).isEmpty)
+    }
+
+    @Test func dockerImageReferenceMustNotBeEmpty() {
+        let settings = DockerSettings(imageReference: "")
+
+        #expect(BuilderConfigValidator.validate(settings) == [.dockerImageReferenceEmpty])
+    }
+
+    @Test func dockerImageReferenceMustIncludeTagOrDigest() {
+        let settings = DockerSettings(imageReference: "docker.io/library/docker")
+
+        #expect(BuilderConfigValidator.validate(settings) == [.dockerImageReferenceMalformed("docker.io/library/docker")])
+    }
+
+    @Test func dockerDigestImageReferenceIsValid() {
+        let settings = DockerSettings(imageReference: "docker.io/library/docker@sha256:" + String(repeating: "a", count: 64))
+
+        #expect(BuilderConfigValidator.validate(settings).isEmpty)
+    }
+
+    @Test func dockerDaemonConfigMustBeJSONObject() {
+        let settings = DockerSettings(daemonConfigJSON: #"["not", "object"]"#)
+
+        #expect(BuilderConfigValidator.validate(settings).contains(.dockerDaemonConfigMalformed("top-level value must be a JSON object")))
+    }
+
+    @Test func dockerDaemonConfigAcceptsValidJSONObject() {
+        let settings = DockerSettings(daemonConfigJSON: #"{"debug":true}"#)
+
+        #expect(BuilderConfigValidator.validate(settings).isEmpty)
+    }
+
+    @Test func dockerResourcesAreValidated() {
+        let settings = DockerSettings(cpuCount: 0, memoryMiB: 128)
+
+        #expect(BuilderConfigValidator.validate(settings).contains(.dockerCPUCountOutOfRange(0)))
+        #expect(BuilderConfigValidator.validate(settings).contains(.dockerMemoryOutOfRange(128)))
+    }
+
+    @Test func dockerInitfsReferenceMustBePlausibleImageReference() {
+        let settings = DockerSettings(initfsReference: "ghcr.io/apple/containerization/vminit")
+
+        #expect(BuilderConfigValidator.validate(settings).contains(.dockerInitfsReferenceMalformed("ghcr.io/apple/containerization/vminit")))
+    }
+}
+
+@Suite("BuilderStoragePaths")
+struct BuilderStoragePathsTests {
+    private let root = URL(fileURLWithPath: "/tmp/Crucible", isDirectory: true)
+
+    @Test func defaultBuildKitBuilderPreservesLegacyRootPaths() {
+        let paths = BuilderStoragePaths(appSupportRoot: root)
+
+        #expect(paths.root.path == "/tmp/Crucible")
+        #expect(paths.buildKitSocketURL.path == "/tmp/Crucible/buildkitd.sock")
+        #expect(paths.buildKitStateImageURL.path == "/tmp/Crucible/buildkit-state.ext4")
+        #expect(paths.buildKitDaemonConfigURL.path == "/tmp/Crucible/buildkitd.toml")
+    }
+
+    @Test func additionalBuildersUseNamespacedPaths() {
+        let paths = BuilderStoragePaths(appSupportRoot: root, builderID: "docker")
+
+        #expect(paths.root.path == "/tmp/Crucible/builders/docker")
+        #expect(paths.buildKitSocketURL.path == "/tmp/Crucible/builders/docker/buildkitd.sock")
+        #expect(paths.buildKitStateImageURL.path == "/tmp/Crucible/builders/docker/buildkit-state.ext4")
+        #expect(paths.buildKitDaemonConfigURL.path == "/tmp/Crucible/builders/docker/buildkitd.toml")
+        #expect(paths.dockerSocketURL.path == "/tmp/Crucible/builders/docker/docker.sock")
+        #expect(paths.dockerDataRootURL.path == "/tmp/Crucible/builders/docker/docker-data")
+        #expect(paths.dockerDataImageURL.path == "/tmp/Crucible/builders/docker/docker-data.ext4")
+        #expect(paths.dockerDataImageVersionURL.path == "/tmp/Crucible/builders/docker/docker-data.version")
+        #expect(paths.dockerDaemonConfigURL.path == "/tmp/Crucible/builders/docker/daemon.json")
+    }
+
+    @Test func defaultBuildKitSocketMatchesSettingsDefault() {
+        #expect(BuildKitSettings.defaultHostSocketPath() == BuilderStoragePaths().buildKitSocketURL.path)
     }
 }
 

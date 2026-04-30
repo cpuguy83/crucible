@@ -8,19 +8,6 @@ public struct BuildKitSettings: Sendable, Equatable, Codable {
     public static let defaultImageReference = "docker.io/moby/buildkit:buildx-stable-1"
     public static let legacyDefaultImageReference = "docker.io/moby/buildkit:latest"
     public static let rosettaWorkerPlatformsTOML = "platforms = [\"linux/arm64\", \"linux/amd64\"]"
-    public static let exampleDaemonConfigTOML = """
-    # BuildKit daemon configuration mounted at /etc/buildkit/buildkitd.toml.
-    debug = false
-
-    [worker.oci]
-      platforms = ["linux/arm64", "linux/amd64"]
-      max-parallelism = 4
-      gc = true
-
-      [[worker.oci.gcpolicy]]
-        keepBytes = 21474836480
-        keepDuration = "168h"
-    """
 
     /// Which backend implementation to use.
     public enum BackendKind: String, Sendable, Codable, CaseIterable {
@@ -128,8 +115,7 @@ public struct BuildKitSettings: Sendable, Equatable, Codable {
     }
 
     public static func defaultHostSocketPath() -> String {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        return "\(home)/Library/Application Support/Crucible/buildkitd.sock"
+        BuilderStoragePaths().buildKitSocketURL.path
     }
 
     public func effectiveDaemonConfigTOML() -> String {

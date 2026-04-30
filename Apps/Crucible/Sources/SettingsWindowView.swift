@@ -6,6 +6,8 @@ struct SettingsWindowView: View {
     @ObservedObject var viewModel: TrayViewModel
     @State private var selection: SettingsSection = .general
     @State private var selectedBuildID: String?
+    @State private var showingAddBuilder = false
+    @State private var builderNameDrafts: [String: String] = [:]
     private let hostLimits = HostResourceLimits.current()
 
     var body: some View {
@@ -112,7 +114,7 @@ struct SettingsWindowView: View {
             card("Daemon") {
                 metricRow("Builder", viewModel.selectedBuilderName)
                 metricRow("Status", viewModel.statusText)
-                metricRow("Endpoint", viewModel.endpoint?.url ?? "Not available")
+                metricRow(viewModel.endpointLabel, viewModel.displayedSocketPath ?? "Not available")
                 HStack {
                     Button("Start", action: viewModel.startFromMenu)
                         .disabled(!viewModel.canStart)
@@ -123,22 +125,34 @@ struct SettingsWindowView: View {
                 }
             }
 
-            runtimeSettingsCard
-            imageSettingsCard
-            daemonConfigSettingsCard
-            hostAccessSettingsCard
-            resourceSettingsCard
-            kernelSettingsCard
+            appSettingsCard
+            if viewModel.selectedBuilderIsBuildKit {
+                runtimeSettingsCard
+                buildKitImageSettingsCard
+                buildKitDaemonConfigSettingsCard
+                hostAccessSettingsCard
+                resourceSettingsCard
+                kernelSettingsCard
+            } else {
+                dockerImageSettingsCard
+                dockerDaemonConfigSettingsCard
+                resourceSettingsCard
+                kernelSettingsCard
+            }
         }
     }
 
     private var buildersView: some View {
         VStack(alignment: .leading, spacing: 16) {
             card("Selected Builder") {
-                metricRow("Saved Name", viewModel.selectedBuilderName)
-                metricRow("Type", viewModel.selectedBuilderKindText)
+                Picker("Selected", selection: $viewModel.selectedBuilderID) {
+                    ForEach(viewModel.builderSummaries) { builder in
+                        Text("\(builder.name) (\(builder.kindText))").tag(builder.id)
+                    }
+                }
+                .disabled(!viewModel.canSwitchBuilders)
                 metricRow("Buildx Name", viewModel.buildxBuilderName)
-                Text("Saved builder names distinguish configured endpoints. Docker buildx integration continues to use the single active Crucible builder name `\(viewModel.buildxBuilderName)`.")
+                Text("Only one Crucible builder can run at a time. Stop the current builder before switching.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
@@ -150,8 +164,12 @@ struct SettingsWindowView: View {
                             Image(systemName: builder.isSelected ? "checkmark.circle.fill" : "circle")
                                 .foregroundStyle(builder.isSelected ? Color.accentColor : .secondary)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(builder.name)
-                                    .font(.callout.weight(.medium))
+                                TextField("Builder name", text: builderNameBinding(for: builder))
+                                    .textFieldStyle(.roundedBorder)
+                                    .frame(maxWidth: 240)
+                                    .onSubmit {
+                                        viewModel.renameBuilder(id: builder.id, name: builderNameDrafts[builder.id] ?? builder.name)
+                                    }
                                 Text(builder.kindText)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
@@ -162,10 +180,60 @@ struct SettingsWindowView: View {
                                     .font(.caption.weight(.medium))
                                     .foregroundStyle(.secondary)
                             }
+                            Button("Save Name") {
+                                viewModel.renameBuilder(id: builder.id, name: builderNameDrafts[builder.id] ?? builder.name)
+                            }
+                            .disabled((builderNameDrafts[builder.id] ?? builder.name).trimmingCharacters(in: .whitespacesAndNewlines) == builder.name)
+                            Button("Remove") {
+                                viewModel.removeBuilder(id: builder.id)
+                            }
+                            .disabled(!builder.canRemove)
                         }
                     }
                 }
+                Divider()
+                HStack {
+                    Button("Add Builder") { showingAddBuilder = true }
+                        .disabled(!viewModel.canAddBuilder)
+                    Spacer()
+                }
             }
+            .confirmationDialog("Add Builder", isPresented: $showingAddBuilder) {
+                Button("BuildKit") { viewModel.addBuildKitBuilder() }
+                    .disabled(viewModel.hasAdditionalBuildKitBuilder)
+                Button("Docker") { viewModel.addDockerBuilder() }
+                    .disabled(viewModel.hasDockerBuilder)
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Choose the kind of builder Crucible should create.")
+            }
+            .onChange(of: viewModel.builderSummaries) { _, builders in
+                syncBuilderNameDrafts(with: builders)
+            }
+            .onAppear {
+                syncBuilderNameDrafts(with: viewModel.builderSummaries)
+            }
+        }
+    }
+
+    private func builderNameBinding(for builder: BuilderSummary) -> Binding<String> {
+        Binding(
+            get: { builderNameDrafts[builder.id] ?? builder.name },
+            set: { builderNameDrafts[builder.id] = $0 }
+        )
+    }
+
+    private func syncBuilderNameDrafts(with builders: [BuilderSummary]) {
+        let ids = Set(builders.map(\.id))
+        builderNameDrafts = builderNameDrafts.filter { ids.contains($0.key) }
+        for builder in builders where builderNameDrafts[builder.id] == nil {
+            builderNameDrafts[builder.id] = builder.name
+        }
+    }
+
+    private var appSettingsCard: some View {
+        card("App") {
+            Toggle("Launch Crucible when you log in", isOn: launchAtLoginBinding)
         }
     }
 
@@ -181,16 +249,14 @@ struct SettingsWindowView: View {
             Text("The CLI backend shells out to Apple's `container` binary and is useful for comparing Crucible against the upstream command-line runtime.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-
             Toggle("Start BuildKit when Crucible launches", isOn: $viewModel.settingsDraft.autoStart)
-            Toggle("Launch Crucible when you log in", isOn: launchAtLoginBinding)
             Text("Rosetta x86_64 emulation is enabled automatically when available. Crucible registers binfmt_misc in the VM and advertises linux/amd64 plus linux/arm64 to BuildKit unless your daemon config overrides worker platforms.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
     }
 
-    private var imageSettingsCard: some View {
+    private var buildKitImageSettingsCard: some View {
         card("Images") {
             settingLabel("BuildKit daemon image", "OCI image that contains buildkitd and buildctl. Use a tag while experimenting, or a digest for reproducible behavior.")
             TextField(BuildKitSettings.defaultImageReference, text: $viewModel.settingsDraft.imageReference)
@@ -198,7 +264,7 @@ struct SettingsWindowView: View {
             HStack {
                 Button("Pull Applied Image", action: viewModel.pullImage)
                     .disabled(!viewModel.canPullImage)
-                Text("Pulls `\(viewModel.appliedSettings.imageReference)` into Crucible's local content store.")
+                Text("Pulls `\(viewModel.selectedBuilderAppliedImageReference)` into Crucible's local content store.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -206,6 +272,27 @@ struct SettingsWindowView: View {
             settingLabel("VM init image", "vminitd image used by Apple Containerization to initialize and manage the guest VM. Usually this should match the framework version.")
             TextField("ghcr.io/apple/containerization/vminit:0.31.0", text: $viewModel.settingsDraft.initfsReference)
                 .textFieldStyle(.roundedBorder)
+        }
+    }
+
+    private var dockerImageSettingsCard: some View {
+        card("Images") {
+            settingLabel("Docker daemon image", "OCI image used to start the Docker daemon container. Use a DinD image that starts dockerd by default.")
+            TextField("docker.io/library/docker:dind", text: $viewModel.dockerSettingsDraft.imageReference)
+                .textFieldStyle(.roundedBorder)
+            HStack {
+                Button("Pull Applied Image", action: viewModel.pullImage)
+                    .disabled(!viewModel.canPullImage)
+                Text("Pulls `\(viewModel.selectedBuilderAppliedImageReference)` into Crucible's local content store.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            settingLabel("VM init image", "vminitd image used by Apple Containerization to initialize and manage the guest VM. Usually this should match the framework version.")
+            TextField("ghcr.io/apple/containerization/vminit:0.31.0", text: $viewModel.dockerSettingsDraft.initfsReference)
+                .textFieldStyle(.roundedBorder)
+
+            Toggle("Start Docker when Crucible launches", isOn: $viewModel.dockerSettingsDraft.autoStart)
         }
     }
 
@@ -217,7 +304,7 @@ struct SettingsWindowView: View {
         }
     }
 
-    private var daemonConfigSettingsCard: some View {
+    private var buildKitDaemonConfigSettingsCard: some View {
         card("Daemon Config") {
             settingLabel("buildkitd.toml", "Optional BuildKit daemon TOML configuration. Crucible writes this to app support, mounts it read-only at `/etc/buildkit/buildkitd.toml`, and starts buildkitd with `--config`. Leave empty to use the image defaults.")
             TextEditor(text: $viewModel.settingsDraft.daemonConfigTOML)
@@ -231,9 +318,6 @@ struct SettingsWindowView: View {
                         .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
                 )
             HStack {
-                Button("Load Example") {
-                    viewModel.loadExampleDaemonConfig()
-                }
                 Button("Clear Config") {
                     viewModel.settingsDraft.daemonConfigTOML = ""
                 }
@@ -255,12 +339,47 @@ struct SettingsWindowView: View {
         }
     }
 
+    private var dockerDaemonConfigSettingsCard: some View {
+        card("Daemon Config") {
+            settingLabel("daemon.json", "Optional Docker daemon JSON configuration. Crucible writes this to app support and mounts it read-only at `/etc/docker/daemon.json`. Leave empty to use the image defaults.")
+            TextEditor(text: $viewModel.dockerSettingsDraft.daemonConfigJSON)
+                .font(.system(.body, design: .monospaced))
+                .frame(minHeight: 180)
+                .scrollContentBackground(.hidden)
+                .background(Color(nsColor: .textBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
+                )
+            HStack {
+                Button("Clear Config") {
+                    viewModel.dockerSettingsDraft.daemonConfigJSON = ""
+                }
+                .disabled(viewModel.dockerSettingsDraft.daemonConfigJSON.isEmpty)
+                Button("Copy Path") {
+                    copy(viewModel.daemonConfigPath)
+                }
+                Button("Reveal File") {
+                    viewModel.openDaemonConfigInFinder()
+                }
+                Text("Changes apply when settings are applied and Docker restarts.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Text(viewModel.daemonConfigPath)
+                .font(.caption.monospaced())
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+        }
+    }
+
     private var resourceSettingsCard: some View {
         card("VM Resources") {
-            settingLabel("CPU and memory", "Resources assigned to the Linux VM running BuildKit. Changes apply on the next restart.")
+            settingLabel("CPU and memory", "Resources assigned to the Linux VM running the selected builder. Changes apply on the next restart.")
             resourceSlider(
                 title: "CPU",
-                valueText: "\(viewModel.settingsDraft.cpuCount) cores",
+                valueText: "\(selectedCPUCount) cores",
                 rangeText: "1-\(hostLimits.cpuMax) cores available",
                 value: cpuBinding,
                 range: 1...Double(hostLimits.cpuMax),
@@ -281,7 +400,7 @@ struct SettingsWindowView: View {
                     .textFieldStyle(.roundedBorder)
                 Button("Browse…", action: viewModel.chooseKernelOverride)
                 Button("Use Default", action: viewModel.useDefaultKernel)
-                    .disabled(viewModel.settingsDraft.kernelOverridePath == nil)
+                    .disabled(selectedKernelOverridePath == nil)
             }
         }
     }
@@ -304,7 +423,7 @@ struct SettingsWindowView: View {
                         .foregroundStyle(.orange)
                 }
 
-                Text("Saving recreates the backend; running BuildKit restarts automatically.")
+                Text("Saving recreates the backend; a running builder restarts automatically.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -340,20 +459,21 @@ struct SettingsWindowView: View {
                     .font(.callout)
                 HStack {
                     Button("Add and Use", action: viewModel.addToBuildx)
-                        .disabled(!viewModel.isRunning)
+                        .disabled(!viewModel.isRunning || !viewModel.supportsRawBuildKitEndpoint)
                     Button("Refresh", action: viewModel.refreshBuildxStatus)
                     Button("Recreate", action: viewModel.recreateBuildxBuilder)
-                        .disabled(!viewModel.isRunning)
+                        .disabled(!viewModel.isRunning || !viewModel.supportsRawBuildKitEndpoint)
                     Button("Remove", action: viewModel.removeBuildxBuilder)
+                        .disabled(!viewModel.supportsRawBuildKitEndpoint)
                 }
             }
 
             card("Commands") {
                 HStack {
                     Button("Copy buildx create command", action: viewModel.copyBuildxCreateCommand)
-                        .disabled(viewModel.endpoint == nil)
+                        .disabled(viewModel.endpoint == nil || !viewModel.supportsRawBuildKitEndpoint)
                     Button("Copy BUILDKIT_HOST env", action: viewModel.copyBuildKitHostEnv)
-                        .disabled(viewModel.endpoint == nil)
+                        .disabled(viewModel.endpoint == nil || !viewModel.supportsRawBuildKitEndpoint)
                 }
             }
         }
@@ -366,13 +486,13 @@ struct SettingsWindowView: View {
                 metricRow("State Image", viewModel.storageUsage?.stateImagePath ?? "Not created")
                 metricRow("Capacity", viewModel.storageUsage?.stateImageCapacityText ?? "Not created")
                 metricRow("Allocated", viewModel.storageUsage?.stateImageAllocatedText ?? "Not created")
-                Text("BuildKit's durable state is stored in a sparse ext4 image and mounted at `/var/lib/buildkit` inside the VM. Pruning frees space inside the image; the macOS file may remain allocated until recreated.")
+                Text("The selected builder's durable state is stored in sparse ext4 images inside Crucible's app support directory. Pruning frees space inside the image; the macOS file may remain allocated until recreated.")
                     .foregroundStyle(.secondary)
                     .font(.callout)
                 HStack {
                     Button("Refresh Usage", action: viewModel.refreshStorageUsage)
                     Button("Prune Cache…", action: viewModel.pruneBuildKitCache)
-                        .disabled(!viewModel.isRunning)
+                        .disabled(!viewModel.isRunning || !viewModel.supportsRawBuildKitEndpoint)
                     Button("Reset State…", action: viewModel.resetState)
                         .disabled(!viewModel.canResetState)
                 }
@@ -402,8 +522,8 @@ struct SettingsWindowView: View {
                 metricRow("Recent", viewModel.recentBuildsStatusText)
                 HStack {
                     Button("Reconnect Stream", action: viewModel.refreshActiveBuilds)
-                        .disabled(viewModel.endpoint == nil)
-                    Text("Crucible subscribes to BuildKit build history while the daemon is running.")
+                        .disabled(!viewModel.isRunning || !viewModel.supportsBuildKitOperations)
+                    Text("Crucible subscribes to builder build history while the daemon is running.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
@@ -450,13 +570,13 @@ struct SettingsWindowView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     resetActionRow(
                         title: "Reset Configuration…",
-                        detail: "Restore settings to current defaults without deleting BuildKit state, pulled images, or kernel cache.",
+                        detail: "Restore settings to current defaults without deleting builder state, pulled images, or kernel cache.",
                         action: viewModel.resetConfiguration,
                         disabled: !viewModel.canResetConfiguration
                     )
                     resetActionRow(
                         title: "Reset Local State…",
-                        detail: "Stop BuildKit and delete local state, pulled images, kernels, and rootfs workspaces while preserving configuration.",
+                        detail: "Stop Crucible and delete local state, pulled images, kernels, and rootfs workspaces while preserving configuration.",
                         action: viewModel.resetLocalState,
                         disabled: !viewModel.canResetLocalState
                     )
@@ -483,16 +603,18 @@ struct SettingsWindowView: View {
                 metricRow("Daemon", viewModel.statusText)
                 metricRow("Buildx", viewModel.buildxStatus.displayText)
                 metricRow("Active Builds", viewModel.activeBuildsStatusText)
-                metricRow("Endpoint", viewModel.endpoint?.url ?? "none")
-                metricRow("Backend", viewModel.appliedSettings.backend.rawValue)
-                metricRow("Image", viewModel.appliedSettings.imageReference)
-                metricRow("Platforms", viewModel.configuredWorkerPlatforms)
+                metricRow(viewModel.endpointLabel, viewModel.displayedSocketPath ?? "none")
+                if viewModel.selectedBuilderIsBuildKit {
+                    metricRow("Backend", viewModel.appliedSettings.backend.rawValue)
+                    metricRow("Platforms", viewModel.configuredWorkerPlatforms)
+                }
+                metricRow("Image", viewModel.selectedBuilderAppliedImageReference)
                 metricRow("Rosetta", "enabled automatically when available")
                 metricRow("Last Error", viewModel.lastError ?? "none")
             }
 
             card("Effective Daemon Config") {
-                Text("This is the generated config mounted into buildkitd. Crucible injects worker platforms for Rosetta unless your custom config sets `[worker.oci].platforms` explicitly.")
+                Text(viewModel.daemonConfigDescription)
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 Text(viewModel.daemonConfigPath)
@@ -535,7 +657,7 @@ struct SettingsWindowView: View {
             card("Prerequisites") {
                 Button("Run Checks", action: viewModel.runPrerequisiteChecks)
                 if viewModel.prerequisiteChecks.isEmpty {
-                    Text("Run checks to validate Docker CLI discovery, kernel availability, and socket path configuration.")
+                    Text("Run checks to validate Docker CLI discovery, kernel availability, and selected builder endpoint configuration.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 } else {
@@ -640,7 +762,7 @@ struct SettingsWindowView: View {
             HStack {
                 Text("Exact")
                     .foregroundStyle(.secondary)
-                TextField("MiB", value: $viewModel.settingsDraft.memoryMiB, format: .number)
+                TextField("MiB", value: selectedMemoryMiBBinding, format: .number)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 96)
                 Text("MiB")
@@ -1003,10 +1125,14 @@ struct SettingsWindowView: View {
 
     private var kernelOverrideBinding: Binding<String> {
         Binding {
-            viewModel.settingsDraft.kernelOverridePath ?? ""
+            selectedKernelOverridePath ?? ""
         } set: { newValue in
             let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            viewModel.settingsDraft.kernelOverridePath = trimmed.isEmpty ? nil : trimmed
+            if viewModel.selectedBuilderIsDocker {
+                viewModel.dockerSettingsDraft.kernelOverridePath = trimmed.isEmpty ? nil : trimmed
+            } else {
+                viewModel.settingsDraft.kernelOverridePath = trimmed.isEmpty ? nil : trimmed
+            }
         }
     }
 
@@ -1020,23 +1146,57 @@ struct SettingsWindowView: View {
 
     private var cpuBinding: Binding<Double> {
         Binding {
-            Double(viewModel.settingsDraft.cpuCount)
+            Double(selectedCPUCount)
         } set: { newValue in
-            viewModel.settingsDraft.cpuCount = min(hostLimits.cpuMax, max(1, Int(newValue.rounded())))
+            let value = min(hostLimits.cpuMax, max(1, Int(newValue.rounded())))
+            if viewModel.selectedBuilderIsDocker {
+                viewModel.dockerSettingsDraft.cpuCount = value
+            } else {
+                viewModel.settingsDraft.cpuCount = value
+            }
         }
     }
 
     private var memoryGiBBinding: Binding<Double> {
         Binding {
-            min(Double(hostLimits.memorySliderMaxGiB), max(1, Double(viewModel.settingsDraft.memoryMiB) / 1024.0))
+            min(Double(hostLimits.memorySliderMaxGiB), max(1, Double(selectedMemoryMiB) / 1024.0))
         } set: { newValue in
-            viewModel.settingsDraft.memoryMiB = Int(newValue.rounded()) * 1024
+            let value = Int(newValue.rounded()) * 1024
+            if viewModel.selectedBuilderIsDocker {
+                viewModel.dockerSettingsDraft.memoryMiB = value
+            } else {
+                viewModel.settingsDraft.memoryMiB = value
+            }
+        }
+    }
+
+    private var selectedMemoryMiBBinding: Binding<Int> {
+        Binding {
+            selectedMemoryMiB
+        } set: { newValue in
+            if viewModel.selectedBuilderIsDocker {
+                viewModel.dockerSettingsDraft.memoryMiB = newValue
+            } else {
+                viewModel.settingsDraft.memoryMiB = newValue
+            }
         }
     }
 
     private var memoryGiBText: String {
-        let gb = Double(viewModel.settingsDraft.memoryMiB) / 1024.0
+        let gb = Double(selectedMemoryMiB) / 1024.0
         return gb == floor(gb) ? "\(Int(gb))" : String(format: "%.1f", gb)
+    }
+
+    private var selectedCPUCount: Int {
+        viewModel.selectedBuilderIsDocker ? viewModel.dockerSettingsDraft.cpuCount : viewModel.settingsDraft.cpuCount
+    }
+
+    private var selectedMemoryMiB: Int {
+        viewModel.selectedBuilderIsDocker ? viewModel.dockerSettingsDraft.memoryMiB : viewModel.settingsDraft.memoryMiB
+    }
+
+    private var selectedKernelOverridePath: String? {
+        viewModel.selectedBuilderIsDocker ? viewModel.dockerSettingsDraft.kernelOverridePath : viewModel.settingsDraft.kernelOverridePath
     }
 }
 
@@ -1066,9 +1226,9 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
     var subtitle: String {
         switch self {
         case .builders: "Select which builder Crucible controls."
-        case .general: "Control the BuildKit daemon and copy its endpoint."
+        case .general: "Control the selected builder and copy its endpoint."
         case .buildx: "Manage docker buildx integration."
-        case .builds: "Watch active BuildKit solves."
+        case .builds: "Watch active builder solves."
         case .storage: "Manage cache, metadata, and persistent state."
         case .reset: "Reset configuration or local data."
         case .diagnostics: "Inspect current state and collect troubleshooting details."

@@ -187,18 +187,34 @@ public func isTransientActiveBuildError(_ error: Error) -> Bool {
 }
 
 public struct BuildHistoryClient: Sendable {
-    public var socketPath: String
+    public enum TransportMode: Sendable, Equatable {
+        case buildKitUnixSocket
+        case dockerDirectH2C
+    }
 
-    public init(socketPath: String) {
+    public var socketPath: String
+    public var transportMode: TransportMode
+
+    public init(socketPath: String, transportMode: TransportMode = .buildKitUnixSocket) {
         self.socketPath = socketPath
+        self.transportMode = transportMode
+    }
+
+    private func transport() throws -> HTTP2ClientTransport.Posix {
+        var config = HTTP2ClientTransport.Posix.Config.defaults
+        if transportMode == .dockerDirectH2C {
+            config.http2.authority = "docker"
+        }
+        return try HTTP2ClientTransport.Posix(
+            target: .unixDomainSocket(path: socketPath),
+            transportSecurity: .plaintext,
+            config: config
+        )
     }
 
     @available(macOS 15.0, *)
     public func activeBuilds(limit: Int = 20) async throws -> [ActiveBuild] {
-        let transport = try HTTP2ClientTransport.Posix(
-            target: .unixDomainSocket(path: socketPath),
-            transportSecurity: .plaintext
-        )
+        let transport = try transport()
 
         return try await withGRPCClient(transport: transport) { client in
             var request = Moby_Buildkit_V1_BuildHistoryRequest()
@@ -219,10 +235,7 @@ public struct BuildHistoryClient: Sendable {
 
     @available(macOS 15.0, *)
     public func recentBuilds(limit: Int = 20) async throws -> [RecentBuild] {
-        let transport = try HTTP2ClientTransport.Posix(
-            target: .unixDomainSocket(path: socketPath),
-            transportSecurity: .plaintext
-        )
+        let transport = try transport()
 
         return try await withGRPCClient(transport: transport) { client in
             var request = Moby_Buildkit_V1_BuildHistoryRequest()
@@ -246,10 +259,7 @@ public struct BuildHistoryClient: Sendable {
         limit: Int = 20,
         onUpdate: @Sendable @escaping ([ActiveBuild]) async -> Void
     ) async throws {
-        let transport = try HTTP2ClientTransport.Posix(
-            target: .unixDomainSocket(path: socketPath),
-            transportSecurity: .plaintext
-        )
+        let transport = try transport()
 
         try await withGRPCClient(transport: transport) { client in
             var request = Moby_Buildkit_V1_BuildHistoryRequest()
@@ -275,10 +285,7 @@ public struct BuildHistoryClient: Sendable {
         limit: Int = 20,
         onUpdate: @Sendable @escaping (BuildHistorySnapshot) async -> Void
     ) async throws {
-        let transport = try HTTP2ClientTransport.Posix(
-            target: .unixDomainSocket(path: socketPath),
-            transportSecurity: .plaintext
-        )
+        let transport = try transport()
 
         try await withGRPCClient(transport: transport) { client in
             var request = Moby_Buildkit_V1_BuildHistoryRequest()
@@ -306,10 +313,7 @@ public struct BuildHistoryClient: Sendable {
 
     @available(macOS 15.0, *)
     public func buildLogs(ref: String) async throws -> [BuildLogLine] {
-        let transport = try HTTP2ClientTransport.Posix(
-            target: .unixDomainSocket(path: socketPath),
-            transportSecurity: .plaintext
-        )
+        let transport = try transport()
 
         return try await withGRPCClient(transport: transport) { client in
             var request = Moby_Buildkit_V1_StatusRequest()
@@ -331,10 +335,7 @@ public struct BuildHistoryClient: Sendable {
         ref: String,
         onUpdate: @Sendable @escaping ([BuildLogLine]) async -> Void
     ) async throws {
-        let transport = try HTTP2ClientTransport.Posix(
-            target: .unixDomainSocket(path: socketPath),
-            transportSecurity: .plaintext
-        )
+        let transport = try transport()
 
         try await withGRPCClient(transport: transport) { client in
             var request = Moby_Buildkit_V1_StatusRequest()
@@ -355,10 +356,7 @@ public struct BuildHistoryClient: Sendable {
 
     @available(macOS 15.0, *)
     public func buildTrace(_ descriptor: BuildHistoryDescriptor) async throws -> Data {
-        let transport = try HTTP2ClientTransport.Posix(
-            target: .unixDomainSocket(path: socketPath),
-            transportSecurity: .plaintext
-        )
+        let transport = try transport()
 
         return try await withGRPCClient(transport: transport) { client in
             var request = Containerd_Services_Content_V1_ReadContentRequest()
@@ -378,10 +376,7 @@ public struct BuildHistoryClient: Sendable {
 
     @available(macOS 15.0, *)
     public func updateBuildHistory(ref: String, pinned: Bool? = nil, delete: Bool = false, finalize: Bool = false) async throws {
-        let transport = try HTTP2ClientTransport.Posix(
-            target: .unixDomainSocket(path: socketPath),
-            transportSecurity: .plaintext
-        )
+        let transport = try transport()
 
         try await withGRPCClient(transport: transport) { client in
             var request = Moby_Buildkit_V1_UpdateBuildHistoryRequest()

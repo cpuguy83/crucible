@@ -142,9 +142,7 @@ public actor ContainerCLIBackend: BuildKitBackend {
     }
 
     public static func defaultAppRoot() -> URL {
-        FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("Crucible", isDirectory: true)
+        BuilderStoragePaths.defaultAppSupportRoot()
     }
 
     private func runContainerCLI(_ arguments: [String]) async throws -> String {
@@ -259,21 +257,16 @@ public enum ContainerCLICommands {
         statePath: String,
         configDirectoryPath: String?
     ) -> Command {
-        var args = [
-            "run",
-            "--detach",
-            "--name", containerID,
-            "--init",
-            "--cpus", "\(settings.cpuCount)",
-            "--memory", "\(settings.memoryMiB)M",
-            "--publish-socket", "\(settings.hostSocketPath):/run/buildkit/buildkitd.sock",
-            "--mount", "type=bind,source=\(statePath),target=/var/lib/buildkit",
-        ]
-
-        if let kernelOverridePath = settings.kernelOverridePath, !kernelOverridePath.isEmpty {
-            args.append(contentsOf: ["--kernel", kernelOverridePath])
-        }
-        args.append("--rosetta")
+        var args = runDetachedDaemonContainerArgs(
+            containerID: containerID,
+            cpuCount: settings.cpuCount,
+            memoryMiB: settings.memoryMiB,
+            kernelOverridePath: settings.kernelOverridePath,
+            hostSocketPath: settings.hostSocketPath,
+            guestSocketPath: "/run/buildkit/buildkitd.sock",
+            statePath: statePath,
+            guestStatePath: "/var/lib/buildkit"
+        )
         if let configDirectoryPath {
             args.append(contentsOf: [
                 "--mount", "type=bind,source=\(configDirectoryPath),target=/etc/buildkit,readonly",
@@ -286,6 +279,33 @@ public enum ContainerCLICommands {
             args.append(contentsOf: ["--config", ContainerCLIBackend.daemonConfigGuestPath])
         }
         return .init(executable: binary, arguments: args)
+    }
+
+    private static func runDetachedDaemonContainerArgs(
+        containerID: String,
+        cpuCount: Int,
+        memoryMiB: Int,
+        kernelOverridePath: String?,
+        hostSocketPath: String,
+        guestSocketPath: String,
+        statePath: String,
+        guestStatePath: String
+    ) -> [String] {
+        var args = [
+            "run",
+            "--detach",
+            "--name", containerID,
+            "--init",
+            "--cpus", "\(cpuCount)",
+            "--memory", "\(memoryMiB)M",
+            "--publish-socket", "\(hostSocketPath):\(guestSocketPath)",
+            "--mount", "type=bind,source=\(statePath),target=\(guestStatePath)",
+        ]
+        if let kernelOverridePath, !kernelOverridePath.isEmpty {
+            args.append(contentsOf: ["--kernel", kernelOverridePath])
+        }
+        args.append("--rosetta")
+        return args
     }
 
     public static func pullImage(binary: String, image: String) -> Command {
