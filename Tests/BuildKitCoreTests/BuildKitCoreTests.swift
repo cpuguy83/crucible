@@ -371,6 +371,23 @@ struct AppSettingsTests {
         #expect(settings.selectedBuilderIsBuildKit)
     }
 
+    @Test func selectingBuilderUpdatesSelectedBuilderID() {
+        let docker = BuilderConfig.docker(id: "docker", name: "Docker")
+        let settings = AppSettings(builders: [.defaultBuildKit, docker])
+            .selectingBuilder(id: "docker")
+
+        #expect(settings.selectedBuilder == docker)
+        #expect(settings.selectedDockerSettings == DockerSettings())
+    }
+
+    @Test func upsertingBuilderAddsAndCanSelectBuilder() {
+        let docker = BuilderConfig.docker(id: "docker", name: "Docker")
+        let settings = AppSettings().upsertingBuilder(docker, select: true)
+
+        #expect(settings.builders == [.defaultBuildKit, docker])
+        #expect(settings.selectedBuilder == docker)
+    }
+
     @Test func builderKindCasesRoundTripThroughJSON() throws {
         let settings = AppSettings(
             selectedBuilderID: "docker",

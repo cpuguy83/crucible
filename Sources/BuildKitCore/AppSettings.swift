@@ -46,6 +46,34 @@ public struct AppSettings: Sendable, Equatable, Codable {
 
     public var selectedBuilderIsBuildKit: Bool { selectedBuilder.isBuildKit }
 
+    public var selectedDockerSettings: DockerSettings {
+        guard case .docker(let settings) = selectedBuilder.kind else {
+            return DockerSettings()
+        }
+        return settings
+    }
+
+    public func selectingBuilder(id: String) -> AppSettings {
+        AppSettings(
+            selectedBuilderID: id,
+            builders: builders,
+            buildxName: buildxName
+        )
+    }
+
+    public func upsertingBuilder(_ builder: BuilderConfig, select: Bool = false) -> AppSettings {
+        var copy = self
+        if let index = copy.builders.firstIndex(where: { $0.id == builder.id }) {
+            copy.builders[index] = builder
+        } else {
+            copy.builders.append(builder)
+        }
+        if select {
+            copy.selectedBuilderID = builder.id
+        }
+        return AppSettings(selectedBuilderID: copy.selectedBuilderID, builders: copy.builders, buildxName: copy.buildxName)
+    }
+
     public func replacingSelectedBuildKitSettings(_ settings: BuildKitSettings) -> AppSettings {
         var copy = self
         guard let index = copy.builders.firstIndex(where: { $0.id == copy.selectedBuilderID }) else {
@@ -86,6 +114,10 @@ public struct BuilderConfig: Sendable, Equatable, Codable, Identifiable {
 
     public static func buildKit(id: String, name: String, settings: BuildKitSettings) -> BuilderConfig {
         BuilderConfig(id: id, name: name, kind: .buildKit(settings))
+    }
+
+    public static func docker(id: String, name: String, settings: DockerSettings = DockerSettings()) -> BuilderConfig {
+        BuilderConfig(id: id, name: name, kind: .docker(settings))
     }
 }
 

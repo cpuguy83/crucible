@@ -112,7 +112,7 @@ struct SettingsWindowView: View {
             card("Daemon") {
                 metricRow("Builder", viewModel.selectedBuilderName)
                 metricRow("Status", viewModel.statusText)
-                metricRow("Endpoint", viewModel.endpoint?.url ?? "Not available")
+                metricRow(viewModel.endpointLabel, viewModel.displayedSocketPath ?? "Not available")
                 HStack {
                     Button("Start", action: viewModel.startFromMenu)
                         .disabled(!viewModel.canStart)
@@ -340,20 +340,21 @@ struct SettingsWindowView: View {
                     .font(.callout)
                 HStack {
                     Button("Add and Use", action: viewModel.addToBuildx)
-                        .disabled(!viewModel.isRunning)
+                        .disabled(!viewModel.isRunning || !viewModel.supportsRawBuildKitEndpoint)
                     Button("Refresh", action: viewModel.refreshBuildxStatus)
                     Button("Recreate", action: viewModel.recreateBuildxBuilder)
-                        .disabled(!viewModel.isRunning)
+                        .disabled(!viewModel.isRunning || !viewModel.supportsRawBuildKitEndpoint)
                     Button("Remove", action: viewModel.removeBuildxBuilder)
+                        .disabled(!viewModel.supportsRawBuildKitEndpoint)
                 }
             }
 
             card("Commands") {
                 HStack {
                     Button("Copy buildx create command", action: viewModel.copyBuildxCreateCommand)
-                        .disabled(viewModel.endpoint == nil)
+                        .disabled(viewModel.endpoint == nil || !viewModel.supportsRawBuildKitEndpoint)
                     Button("Copy BUILDKIT_HOST env", action: viewModel.copyBuildKitHostEnv)
-                        .disabled(viewModel.endpoint == nil)
+                        .disabled(viewModel.endpoint == nil || !viewModel.supportsRawBuildKitEndpoint)
                 }
             }
         }
@@ -372,7 +373,7 @@ struct SettingsWindowView: View {
                 HStack {
                     Button("Refresh Usage", action: viewModel.refreshStorageUsage)
                     Button("Prune Cache…", action: viewModel.pruneBuildKitCache)
-                        .disabled(!viewModel.isRunning)
+                        .disabled(!viewModel.isRunning || !viewModel.supportsBuildKitOperations)
                     Button("Reset State…", action: viewModel.resetState)
                         .disabled(!viewModel.canResetState)
                 }
@@ -402,7 +403,7 @@ struct SettingsWindowView: View {
                 metricRow("Recent", viewModel.recentBuildsStatusText)
                 HStack {
                     Button("Reconnect Stream", action: viewModel.refreshActiveBuilds)
-                        .disabled(viewModel.endpoint == nil)
+                        .disabled(!viewModel.isRunning || !viewModel.supportsBuildKitOperations)
                     Text("Crucible subscribes to BuildKit build history while the daemon is running.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
@@ -483,7 +484,7 @@ struct SettingsWindowView: View {
                 metricRow("Daemon", viewModel.statusText)
                 metricRow("Buildx", viewModel.buildxStatus.displayText)
                 metricRow("Active Builds", viewModel.activeBuildsStatusText)
-                metricRow("Endpoint", viewModel.endpoint?.url ?? "none")
+                metricRow(viewModel.endpointLabel, viewModel.displayedSocketPath ?? "none")
                 metricRow("Backend", viewModel.appliedSettings.backend.rawValue)
                 metricRow("Image", viewModel.appliedSettings.imageReference)
                 metricRow("Platforms", viewModel.configuredWorkerPlatforms)

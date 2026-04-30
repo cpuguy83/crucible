@@ -1,12 +1,13 @@
 import Foundation
 import BuildKitCore
+import BuildKitContainerCLI
 
 struct SelectedBuilderRuntime {
     typealias BackendFactory = BuildKitSupervisor.BackendFactory
 
     private enum Implementation {
         case buildKit(BuildKitSupervisor)
-        case unsupported(String)
+        case docker(DockerContainerCLIBackend)
     }
 
     private let implementation: Implementation
@@ -15,26 +16,42 @@ struct SelectedBuilderRuntime {
         switch appSettings.selectedBuilder.kind {
         case .buildKit(let settings):
             self.implementation = .buildKit(BuildKitSupervisor(settings: settings, factory: backendFactory))
-        case .docker:
-            self.implementation = .unsupported("Docker builders are not implemented yet.")
+        case .docker(let settings):
+            self.implementation = .docker(DockerContainerCLIBackend(
+                settings: settings,
+                paths: BuilderStoragePaths(builderID: appSettings.selectedBuilder.id)
+            ))
         }
     }
 
-    var supportsLifecycle: Bool {
+    var supportsLifecycle: Bool { true }
+
+    var supportsBuildKitOperations: Bool {
+        true
+    }
+
+    var supportsRawBuildKitEndpoint: Bool {
+        if case .buildKit = implementation { return true }
+        return false
+    }
+
+    var supportsImagePull: Bool { true }
+
+    var imageReference: String {
         switch implementation {
-        case .buildKit: return true
-        case .unsupported: return false
+        case .buildKit:
+            return "BuildKit image"
+        case .docker:
+            return "Docker image"
         }
     }
-
-    var supportsBuildKitOperations: Bool { supportsLifecycle }
 
     var initialState: BuildKitState {
         switch implementation {
         case .buildKit:
             return .stopped
-        case .unsupported(let message):
-            return .error(message)
+        case .docker:
+            return .stopped
         }
     }
 
@@ -42,8 +59,28 @@ struct SelectedBuilderRuntime {
         switch implementation {
         case .buildKit(let supervisor):
             return await supervisor.currentState()
-        case .unsupported(let message):
-            return .error(message)
+        case .docker(let backend):
+            return Self.mapDockerState(await backend.currentState())
+        }
+    }
+
+    func currentDockerEndpoint() async -> DockerDaemonEndpoint? {
+        guard case .docker(let backend) = implementation else { return nil }
+        if case .running(let endpoint) = await backend.currentState() {
+            return endpoint
+        }
+        return nil
+    }
+
+    func currentBuildHistorySocketPath() async -> String? {
+        switch implementation {
+        case .buildKit(let supervisor):
+            return Self.buildKitSocketPath(from: await supervisor.currentState())
+        case .docker(let backend):
+            if case .running(let endpoint) = await backend.currentState() {
+                return endpoint.socketPath
+            }
+            return nil
         }
     }
 
@@ -55,8 +92,12 @@ struct SelectedBuilderRuntime {
         switch implementation {
         case .buildKit(let supervisor):
             return try await supervisor.streams()
-        case .unsupported(let message):
-            throw BuildKitBackendError.configurationInvalid(message)
+        case .docker(let backend):
+            return (
+                state: Self.mapDockerStateStream(backend.stateStream),
+                progress: backend.progressStream,
+                logs: backend.logStream
+            )
         }
     }
 
@@ -64,8 +105,8 @@ struct SelectedBuilderRuntime {
         switch implementation {
         case .buildKit(let supervisor):
             try await supervisor.start()
-        case .unsupported(let message):
-            throw BuildKitBackendError.configurationInvalid(message)
+        case .docker(let backend):
+            try await backend.start()
         }
     }
 
@@ -73,8 +114,8 @@ struct SelectedBuilderRuntime {
         switch implementation {
         case .buildKit(let supervisor):
             try await supervisor.stop()
-        case .unsupported:
-            return
+        case .docker(let backend):
+            try await backend.stop()
         }
     }
 
@@ -82,8 +123,8 @@ struct SelectedBuilderRuntime {
         switch implementation {
         case .buildKit(let supervisor):
             try await supervisor.restart()
-        case .unsupported(let message):
-            throw BuildKitBackendError.configurationInvalid(message)
+        case .docker(let backend):
+            try await backend.restart()
         }
     }
 
@@ -91,8 +132,8 @@ struct SelectedBuilderRuntime {
         switch implementation {
         case .buildKit(let supervisor):
             try await supervisor.pullImage()
-        case .unsupported(let message):
-            throw BuildKitBackendError.configurationInvalid(message)
+        case .docker(let backend):
+            try await backend.pullImage()
         }
     }
 
@@ -100,8 +141,55 @@ struct SelectedBuilderRuntime {
         switch implementation {
         case .buildKit(let supervisor):
             try await supervisor.resetState()
-        case .unsupported(let message):
-            throw BuildKitBackendError.configurationInvalid(message)
+        case .docker(let backend):
+            try await backend.resetState()
+        }
+    }
+
+    func isRunning(_ state: BuildKitState) -> Bool {
+        switch state {
+        case .running, .degraded:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private static func mapDockerState(_ state: DockerDaemonState) -> BuildKitState {
+        switch state {
+        case .stopped:
+            return .stopped
+        case .starting:
+            return .starting
+        case .running:
+            return .degraded(reason: "Docker daemon is running; BuildKit transport is not connected yet.", endpoint: nil)
+        case .stopping:
+            return .stopping
+        case .error(let message):
+            return .error(message)
+        }
+    }
+
+    private static func buildKitSocketPath(from state: BuildKitState) -> String? {
+        switch state {
+        case .running(let endpoint):
+            return endpoint.socketPath
+        case .degraded(_, let endpoint):
+            return endpoint?.socketPath
+        default:
+            return nil
+        }
+    }
+
+    private static func mapDockerStateStream(_ stream: AsyncStream<DockerDaemonState>) -> AsyncStream<BuildKitState> {
+        AsyncStream { continuation in
+            let task = Task {
+                for await state in stream {
+                    continuation.yield(mapDockerState(state))
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
         }
     }
 }

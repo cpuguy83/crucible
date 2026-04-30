@@ -286,6 +286,31 @@ public enum ContainerCLICommands {
         return .init(executable: binary, arguments: args)
     }
 
+    public static func runDetachedDocker(
+        binary: String,
+        containerID: String,
+        settings: DockerSettings,
+        socketPath: String,
+        dataRootPath: String
+    ) -> Command {
+        let args = [
+            "run",
+            "--detach",
+            "--name", containerID,
+            "--init",
+            "--privileged",
+            "--env", "DOCKER_TLS_CERTDIR=",
+            "--publish-socket", "\(socketPath):/var/run/docker.sock",
+            "--mount", "type=bind,source=\(dataRootPath),target=/var/lib/docker",
+            "--rosetta",
+            settings.imageReference,
+            "dockerd",
+            "--host", "unix:///var/run/docker.sock",
+            "--data-root", "/var/lib/docker",
+        ]
+        return .init(executable: binary, arguments: args)
+    }
+
     public static func pullImage(binary: String, image: String) -> Command {
         .init(executable: binary, arguments: ["image", "pull", image])
     }

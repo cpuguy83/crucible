@@ -13,6 +13,7 @@ final class TrayViewModel: ObservableObject {
     @Published private(set) var progressMessage: String?
     @Published private(set) var logTail: [String] = []
     @Published private(set) var buildxStatus: BuildxIntegration.BuilderStatus = .unknown
+    @Published private(set) var dockerEndpoint: DockerDaemonEndpoint?
     @Published private(set) var storageUsage: StorageUsage?
     @Published private(set) var appliedSettings: BuildKitSettings
     @Published var launchAtLoginEnabled: Bool
@@ -95,7 +96,7 @@ final class TrayViewModel: ObservableObject {
     }
 
     var canPullImage: Bool {
-        runtime.supportsBuildKitOperations && !settingsDirty && !settingsApplyBlocked && BuildKitSettingsValidator.validate(appliedSettings).isEmpty
+        runtime.supportsImagePull && !settingsDirty && !settingsApplyBlocked && BuilderConfigValidator.validate(appSettings.selectedBuilder).isEmpty
     }
 
     var canFactoryReset: Bool {
@@ -123,6 +124,14 @@ final class TrayViewModel: ObservableObject {
     var buildxBuilderName: String { appSettings.buildxName }
 
     private var buildxBuilderNameForCommands: String { appSettings.buildxName }
+
+    var supportsBuildKitOperations: Bool { runtime.supportsBuildKitOperations }
+
+    var supportsRawBuildKitEndpoint: Bool { runtime.supportsRawBuildKitEndpoint }
+
+    var endpointLabel: String { runtime.supportsRawBuildKitEndpoint ? "BuildKit socket" : "Docker socket" }
+
+    var displayedSocketPath: String? { endpoint?.socketPath ?? dockerEndpoint?.socketPath }
 
     var builderSummaries: [BuilderSummary] {
         appSettings.builders.map { builder in
@@ -192,6 +201,7 @@ final class TrayViewModel: ObservableObject {
     }
 
     var endpoint: BuildKitEndpoint? {
+        guard runtime.supportsRawBuildKitEndpoint else { return nil }
         switch state {
         case .running(let ep): return ep
         case .degraded(_, let ep): return ep
@@ -217,6 +227,7 @@ final class TrayViewModel: ObservableObject {
         do {
             try await runtime.stop()
             state = await runtime.currentState()
+            dockerEndpoint = await runtime.currentDockerEndpoint()
             lastError = nil
             logStore.append(source: .supervisor, level: .info, "BuildKit stopped")
         } catch {
@@ -240,6 +251,7 @@ final class TrayViewModel: ObservableObject {
             do {
                 try await self.runtime.pullImage()
                 self.state = await runtime.currentState()
+                self.dockerEndpoint = await runtime.currentDockerEndpoint()
                 self.lastError = nil
                 self.refreshStorageUsage()
                 self.logStore.append(source: .supervisor, level: .info, "Pulled \(self.appliedSettings.imageReference)")
@@ -294,6 +306,7 @@ final class TrayViewModel: ObservableObject {
                 self.recentBuilds = []
                 self.recentBuildsStatus = .notChecked
                 self.state = await runtime.currentState()
+                self.dockerEndpoint = await runtime.currentDockerEndpoint()
                 self.lastError = nil
                 self.logStore.append(source: .supervisor, level: .info, "Configuration reset to defaults")
                 if shouldRestart || defaults.autoStart {
@@ -381,6 +394,7 @@ final class TrayViewModel: ObservableObject {
         recentBuildsStatus = .notChecked
         Task {
             self.state = await runtime.currentState()
+            self.dockerEndpoint = await runtime.currentDockerEndpoint()
             self.lastError = nil
             self.refreshStorageUsage()
             self.logStore.append(source: .supervisor, level: .info, message)
@@ -414,7 +428,7 @@ final class TrayViewModel: ObservableObject {
         Crucible diagnostics
         State: \(String(describing: state))
         Buildx: \(buildxStatus.displayText)
-        Endpoint: \(endpoint?.url ?? "none")
+        Endpoint: \(displayedSocketPath ?? "none")
         Storage: \(storageUsage?.displayText ?? "not created")
         Active builds: \(activeBuildsStatusText)
         Recent builds: \(recentBuildsStatusText)
@@ -445,11 +459,6 @@ final class TrayViewModel: ObservableObject {
     }
 
     func openBuildLogsWindow(ref: String) {
-        guard let endpoint else {
-            logStore.append(source: .supervisor, level: .warning, "build logs unavailable: BuildKit is not running")
-            return
-        }
-
         let store = LogStore()
         store.append(source: .buildkitd, level: .info, "Loading logs for build \(ref)")
         buildLogTask?.cancel()
@@ -461,11 +470,17 @@ final class TrayViewModel: ObservableObject {
         buildLogWindowController?.show()
 
         buildLogTask = Task {
+            guard let socketPath = await self.runtime.currentBuildHistorySocketPath() else {
+                await MainActor.run {
+                    store.append(source: .buildkitd, level: .warning, "build logs unavailable: BuildKit is not running")
+                }
+                return
+            }
             var sawLines = false
             var retryDelaySeconds: UInt64 = 1
             while !Task.isCancelled {
                 do {
-                    try await BuildHistoryClient(socketPath: endpoint.socketPath).watchBuildLogs(ref: ref) { lines in
+                    try await BuildHistoryClient(socketPath: socketPath).watchBuildLogs(ref: ref) { lines in
                         await MainActor.run {
                             if !sawLines {
                                 store.clear()
@@ -510,11 +525,6 @@ final class TrayViewModel: ObservableObject {
     }
 
     func exportBuildTrace(_ descriptor: BuildHistoryDescriptor, suggestedName: String) {
-        guard let endpoint else {
-            logStore.append(source: .supervisor, level: .warning, "trace unavailable: BuildKit is not running")
-            return
-        }
-
         let panel = NSSavePanel()
         panel.title = "Export Build Trace"
         panel.nameFieldStringValue = "crucible-build-\(Self.shortRef(suggestedName))-trace.otlp.json"
@@ -522,8 +532,14 @@ final class TrayViewModel: ObservableObject {
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
         Task {
+            guard let socketPath = await self.runtime.currentBuildHistorySocketPath() else {
+                await MainActor.run {
+                    self.logStore.append(source: .supervisor, level: .warning, "trace unavailable: BuildKit is not running")
+                }
+                return
+            }
             do {
-                let data = try await BuildHistoryClient(socketPath: endpoint.socketPath).buildTrace(descriptor)
+                let data = try await BuildHistoryClient(socketPath: socketPath).buildTrace(descriptor)
                 try data.write(to: url, options: .atomic)
                 await MainActor.run {
                     self.logStore.append(source: .supervisor, level: .info, "Exported build trace to \(url.path)")
@@ -539,14 +555,15 @@ final class TrayViewModel: ObservableObject {
     }
 
     func setBuildPinned(ref: String, pinned: Bool) {
-        guard let endpoint else {
-            logStore.append(source: .supervisor, level: .warning, "build history unavailable: BuildKit is not running")
-            return
-        }
-
         Task {
+            guard let socketPath = await self.runtime.currentBuildHistorySocketPath() else {
+                await MainActor.run {
+                    self.logStore.append(source: .supervisor, level: .warning, "build history unavailable: BuildKit is not running")
+                }
+                return
+            }
             do {
-                try await BuildHistoryClient(socketPath: endpoint.socketPath).updateBuildHistory(ref: ref, pinned: pinned)
+                try await BuildHistoryClient(socketPath: socketPath).updateBuildHistory(ref: ref, pinned: pinned)
                 await MainActor.run {
                     self.logStore.append(source: .supervisor, level: .info, "\(pinned ? "Pinned" : "Unpinned") build \(ref)")
                 }
@@ -561,11 +578,6 @@ final class TrayViewModel: ObservableObject {
     }
 
     func deleteBuildRecord(ref: String) {
-        guard let endpoint else {
-            logStore.append(source: .supervisor, level: .warning, "build history unavailable: BuildKit is not running")
-            return
-        }
-
         let alert = NSAlert()
         alert.messageText = "Delete Build Record?"
         alert.informativeText = "This removes the build history record for \(ref). It does not cancel a running build."
@@ -575,8 +587,14 @@ final class TrayViewModel: ObservableObject {
         guard alert.runModal() == .alertFirstButtonReturn else { return }
 
         Task {
+            guard let socketPath = await self.runtime.currentBuildHistorySocketPath() else {
+                await MainActor.run {
+                    self.logStore.append(source: .supervisor, level: .warning, "build history unavailable: BuildKit is not running")
+                }
+                return
+            }
             do {
-                try await BuildHistoryClient(socketPath: endpoint.socketPath).updateBuildHistory(ref: ref, delete: true)
+                try await BuildHistoryClient(socketPath: socketPath).updateBuildHistory(ref: ref, delete: true)
                 await MainActor.run {
                     self.recentBuilds.removeAll { $0.ref == ref }
                     self.logStore.append(source: .supervisor, level: .info, "Deleted build record \(ref)")
@@ -654,6 +672,7 @@ final class TrayViewModel: ObservableObject {
                 self.recentBuilds = []
                 self.recentBuildsStatus = .notChecked
                 self.state = await runtime.currentState()
+                self.dockerEndpoint = await runtime.currentDockerEndpoint()
                 let notice = shouldRestart ? "Applied settings; restarting BuildKit" : "Applied settings"
                 self.lastError = nil
                 self.logStore.append(source: .supervisor, level: .info, notice)
@@ -746,31 +765,32 @@ final class TrayViewModel: ObservableObject {
     }
 
     func refreshActiveBuilds() {
-        guard let endpoint else {
-            activeBuilds = []
-            activeBuildsStatus = .stopped
-            recentBuilds = []
-            recentBuildsStatus = .stopped
-            return
-        }
-
         activeBuildRefreshTask?.cancel()
         activeBuildRefreshTask = nil
         activeBuilds = []
         recentBuilds = []
-        subscribeBuildHistory(endpoint: endpoint, logSubscription: true)
+        subscribeBuildHistory(logSubscription: true)
     }
 
-    private func subscribeBuildHistory(endpoint: BuildKitEndpoint, logSubscription: Bool) {
+    private func subscribeBuildHistory(logSubscription: Bool) {
         activeBuildsStatus = .checking
         recentBuildsStatus = .checking
         activeBuildRefreshTask = Task { [weak self] in
             var retryDelaySeconds: UInt64 = 1
             while !Task.isCancelled {
                 do {
-                    try await BuildHistoryClient(socketPath: endpoint.socketPath).watchBuildHistory { snapshot in
+                    guard let self else { return }
+                    guard let socketPath = await self.runtime.currentBuildHistorySocketPath() else {
                         await MainActor.run {
-                            guard let self else { return }
+                            self.activeBuilds = []
+                            self.activeBuildsStatus = .stopped
+                            self.recentBuilds = []
+                            self.recentBuildsStatus = .stopped
+                        }
+                        return
+                    }
+                    try await BuildHistoryClient(socketPath: socketPath).watchBuildHistory { snapshot in
+                        await MainActor.run {
                             self.activeBuilds = snapshot.active
                             self.recentBuilds = snapshot.recent
                             self.activeBuildsStatus = .ready(snapshot.active.count)
@@ -861,18 +881,21 @@ final class TrayViewModel: ObservableObject {
     }
 
     func copyBuildKitHostEnv() {
+        guard runtime.supportsRawBuildKitEndpoint else { return }
         guard let ep = endpoint else { return }
         copyToPasteboard(BuildxCommands.buildKitHostEnv(for: ep))
         logStore.append(source: .buildx, level: .info, "Copied BUILDKIT_HOST env")
     }
 
     func copyBuildxCreateCommand() {
+        guard runtime.supportsRawBuildKitEndpoint else { return }
         guard let ep = endpoint else { return }
         copyToPasteboard(BuildxCommands.dockerBuildxCreateCommand(for: ep, builderName: buildxBuilderNameForCommands))
         logStore.append(source: .buildx, level: .info, "Copied docker buildx create command")
     }
 
     func addToBuildx() {
+        guard runtime.supportsRawBuildKitEndpoint else { return }
         guard let ep = endpoint else { return }
         let builderName = buildxBuilderNameForCommands
         Task { [buildx] in
@@ -904,6 +927,10 @@ final class TrayViewModel: ObservableObject {
     }
 
     func refreshBuildxStatus() {
+        guard runtime.supportsRawBuildKitEndpoint else {
+            buildxStatus = .failed("Buildx registration for Docker builders is not implemented yet.")
+            return
+        }
         let builderName = buildxBuilderNameForCommands
         Task { [buildx] in
             let status = await buildx.status(builderName: builderName)
@@ -915,6 +942,7 @@ final class TrayViewModel: ObservableObject {
     }
 
     func recreateBuildxBuilder() {
+        guard runtime.supportsRawBuildKitEndpoint else { return }
         guard let ep = endpoint else { return }
         let builderName = buildxBuilderNameForCommands
         Task { [buildx] in
@@ -945,6 +973,7 @@ final class TrayViewModel: ObservableObject {
     }
 
     func removeBuildxBuilder() {
+        guard runtime.supportsRawBuildKitEndpoint else { return }
         let builderName = buildxBuilderNameForCommands
         Task { [buildx] in
             let result = await buildx.remove(builderName: builderName)
@@ -971,6 +1000,7 @@ final class TrayViewModel: ObservableObject {
     }
 
     func pruneBuildKitCache() {
+        guard runtime.supportsBuildKitOperations else { return }
         guard confirm(
             title: "Prune BuildKit cache?",
             message: "This removes unused BuildKit cache records. The state image file may not shrink on disk, but space is reclaimed inside the image.",
@@ -1056,6 +1086,9 @@ final class TrayViewModel: ObservableObject {
         for await s in stream {
             await MainActor.run {
                 self.state = s
+                if self.runtime.supportsBuildKitOperations {
+                    self.dockerEndpoint = nil
+                }
                 self.updateActiveBuildRefresh(for: s)
                 self.logStore.append(source: .state, String(describing: s))
                 Self.log.notice("state: \(String(describing: s), privacy: .public)")
@@ -1064,7 +1097,7 @@ final class TrayViewModel: ObservableObject {
     }
 
     private func updateActiveBuildRefresh(for state: BuildKitState) {
-        guard let endpoint = Self.endpoint(from: state) else {
+        guard runtime.isRunning(state) else {
             activeBuildRefreshTask?.cancel()
             activeBuildRefreshTask = nil
             activeBuilds = []
@@ -1074,7 +1107,7 @@ final class TrayViewModel: ObservableObject {
         }
 
         if activeBuildRefreshTask != nil { return }
-        subscribeBuildHistory(endpoint: endpoint, logSubscription: false)
+        subscribeBuildHistory(logSubscription: false)
     }
 
     private func consumeProgress(_ stream: AsyncStream<BuildKitProgress>) async {
@@ -1104,6 +1137,7 @@ final class TrayViewModel: ObservableObject {
         do {
             try await op()
             self.state = await runtime.currentState()
+            self.dockerEndpoint = await runtime.currentDockerEndpoint()
             self.lastError = nil
             self.refreshStorageUsage()
         } catch {
