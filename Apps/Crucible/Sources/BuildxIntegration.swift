@@ -67,6 +67,32 @@ actor BuildxIntegration {
         case useFailed(stderr: String, exitCode: Int32)
     }
 
+    enum ContextStatus: Sendable, Equatable {
+        case unknown
+        case dockerNotFound
+        case notRegistered
+        case available
+        case current
+        case failed(String)
+
+        var displayText: String {
+            switch self {
+            case .unknown:
+                return "Unknown"
+            case .dockerNotFound:
+                return "Docker not found"
+            case .notRegistered:
+                return "Not registered"
+            case .available:
+                return "Registered"
+            case .current:
+                return "Current"
+            case .failed(let message):
+                return "Failed: \(message)"
+            }
+        }
+    }
+
     /// Cached docker binary path; nil means "not yet probed".
     private var cachedDockerPath: String?
 
@@ -243,6 +269,26 @@ actor BuildxIntegration {
             }
         }
         return .created(contextName: contextName)
+    }
+
+    func dockerContextStatus(contextName: String = BuildxCommands.defaultBuilderName) async -> ContextStatus {
+        guard let docker = await locateDocker() else { return .dockerNotFound }
+        guard let inspect = await runCapturing(
+            executable: docker,
+            arguments: BuildxCommands.dockerContextInspectArguments(contextName: contextName)
+        ) else { return .failed("failed to run docker context inspect") }
+
+        let output = inspect.stdout + inspect.stderr
+        if inspect.exitCode != 0 {
+            if output.contains("not found") || output.contains("does not exist") || output.contains("No context") {
+                return .notRegistered
+            }
+            return .failed(output.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+
+        guard let current = await runCapturing(executable: docker, arguments: ["context", "show"]),
+              current.exitCode == 0 else { return .available }
+        return current.stdout.trimmingCharacters(in: .whitespacesAndNewlines) == contextName ? .current : .available
     }
 
     func installDockerBackedBuildx(

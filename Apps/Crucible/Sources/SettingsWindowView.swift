@@ -492,6 +492,7 @@ struct SettingsWindowView: View {
         card("Docker CLI") {
             metricRow("Socket", viewModel.displayedSocketPath ?? "Not available")
             metricRow("Context", viewModel.dockerContextName)
+            metricRow("Status", viewModel.dockerContextStatus.displayText)
             Text("Use the selected Docker builder by pointing Docker-compatible tools at Crucible's Docker socket while the builder is running, or create a Docker context for it.")
                 .foregroundStyle(.secondary)
                 .font(.callout)
@@ -502,13 +503,15 @@ struct SettingsWindowView: View {
                     .disabled(viewModel.dockerEndpoint == nil)
                 Button("Copy Docker context command", action: viewModel.copyDockerContextCreateCommand)
                     .disabled(viewModel.dockerEndpoint == nil)
+                Button("Refresh", action: viewModel.refreshDockerIntegrationStatuses)
             }
         }
     }
 
     private var dockerBuildxIntegrationCard: some View {
         card("Docker Buildx") {
-            metricRow("Builder", viewModel.buildxBuilderName)
+            metricRow("Builder", viewModel.dockerBuildxBuilderName)
+            metricRow("Status", viewModel.dockerBuildxStatus.displayText)
             Text("Create a docker-container buildx builder that targets the selected Docker builder through Crucible's Docker context.")
                 .foregroundStyle(.secondary)
                 .font(.callout)

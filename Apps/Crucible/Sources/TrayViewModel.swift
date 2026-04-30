@@ -13,6 +13,8 @@ final class TrayViewModel: ObservableObject {
     @Published private(set) var progressMessage: String?
     @Published private(set) var logTail: [String] = []
     @Published private(set) var buildxStatus: BuildxIntegration.BuilderStatus = .unknown
+    @Published private(set) var dockerContextStatus: BuildxIntegration.ContextStatus = .unknown
+    @Published private(set) var dockerBuildxStatus: BuildxIntegration.BuilderStatus = .unknown
     @Published private(set) var dockerEndpoint: DockerDaemonEndpoint?
     @Published private(set) var storageUsage: StorageUsage?
     @Published private(set) var appliedSettings: BuildKitSettings
@@ -172,7 +174,16 @@ final class TrayViewModel: ObservableObject {
 
     private var buildxBuilderNameForCommands: String { appSettings.buildxName }
 
-    var dockerContextName: String { appSettings.buildxName }
+    var dockerContextName: String { dockerIntegrationName }
+
+    var dockerBuildxBuilderName: String { dockerIntegrationName }
+
+    private var dockerIntegrationName: String {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_."))
+        let suffix = String(appSettings.selectedBuilder.id.unicodeScalars.map { allowed.contains($0) ? Character($0) : "-" })
+            .trimmingCharacters(in: CharacterSet(charactersIn: "-."))
+        return "\(appSettings.buildxName)-\(suffix.isEmpty ? "docker" : suffix)"
+    }
 
     var supportsBuildKitOperations: Bool { runtime.supportsBuildKitOperations }
 
@@ -1107,7 +1118,7 @@ final class TrayViewModel: ObservableObject {
 
     func copyDockerBuildxCreateCommand() {
         copyToPasteboard(BuildxCommands.dockerBuildxCreateDockerCommand(
-            builderName: buildxBuilderNameForCommands,
+            builderName: dockerBuildxBuilderName,
             contextName: dockerContextName
         ))
         logStore.append(source: .buildx, level: .info, "Copied Docker-backed buildx create command")
@@ -1138,13 +1149,14 @@ final class TrayViewModel: ObservableObject {
                     self.logStore.append(source: .buildx, level: .error, self.lastError ?? "")
                 }
             }
+            self.refreshDockerIntegrationStatuses()
         }
     }
 
     func createDockerBackedBuildxBuilder() {
         guard let ep = dockerEndpoint else { return }
         let endpoint = BuildKitEndpoint(socketPath: ep.socketPath)
-        let builderName = buildxBuilderNameForCommands
+        let builderName = dockerBuildxBuilderName
         let contextName = dockerContextName
         Task { [buildx] in
             let result = await buildx.installDockerBackedBuildx(endpoint: endpoint, builderName: builderName, contextName: contextName)
@@ -1167,7 +1179,7 @@ final class TrayViewModel: ObservableObject {
                     self.logStore.append(source: .buildx, level: .error, self.lastError ?? "")
                 }
             }
-            self.refreshBuildxStatus()
+            self.refreshDockerIntegrationStatuses()
         }
     }
 
@@ -1211,6 +1223,10 @@ final class TrayViewModel: ObservableObject {
     }
 
     func refreshBuildxStatus() {
+        if selectedBuilderIsDocker {
+            refreshDockerIntegrationStatuses()
+            return
+        }
         guard runtime.supportsRawBuildKitEndpoint else {
             buildxStatus = .failed("Buildx registration for Docker builders is not implemented yet.")
             return
@@ -1221,6 +1237,22 @@ final class TrayViewModel: ObservableObject {
             await MainActor.run {
                 self.buildxStatus = status
                 self.logStore.append(source: .buildx, level: .info, "buildx status: \(status.displayText)")
+            }
+        }
+    }
+
+    func refreshDockerIntegrationStatuses() {
+        guard selectedBuilderIsDocker else { return }
+        let contextName = dockerContextName
+        let builderName = dockerBuildxBuilderName
+        Task { [buildx] in
+            let contextStatus = await buildx.dockerContextStatus(contextName: contextName)
+            let buildxStatus = await buildx.status(builderName: builderName)
+            await MainActor.run {
+                self.dockerContextStatus = contextStatus
+                self.dockerBuildxStatus = buildxStatus
+                self.logStore.append(source: .buildx, level: .info, "docker context status: \(contextStatus.displayText)")
+                self.logStore.append(source: .buildx, level: .info, "Docker-backed buildx status: \(buildxStatus.displayText)")
             }
         }
     }
