@@ -1,4 +1,5 @@
 import Foundation
+import BuildKitCore
 
 struct StorageUsage: Sendable, Equatable {
     struct Area: Sendable, Equatable, Identifiable {
@@ -36,8 +37,9 @@ struct StorageUsage: Sendable, Equatable {
     }
 
     static func current() -> StorageUsage {
-        let base = appSupportDirectory()
-        let state = base.appendingPathComponent("buildkit-state.ext4")
+        let paths = BuilderStoragePaths(appSupportRoot: appSupportDirectory())
+        let base = paths.root
+        let state = paths.buildKitStateImageURL
         let content = base.appendingPathComponent("content", isDirectory: true)
         let containers = base.appendingPathComponent("containers", isDirectory: true)
         let kernels = base.appendingPathComponent("kernels", isDirectory: true)
@@ -93,13 +95,11 @@ struct StorageUsage: Sendable, Equatable {
     }
 
     static func appSupportDirectory() -> URL {
-        FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("Crucible", isDirectory: true)
+        BuilderStoragePaths.defaultAppSupportRoot()
     }
 
     static func daemonConfigURL() -> URL {
-        appSupportDirectory().appendingPathComponent("buildkitd.toml")
+        BuilderStoragePaths(appSupportRoot: appSupportDirectory()).buildKitDaemonConfigURL
     }
 
     static func format(_ bytes: Int64) -> String {

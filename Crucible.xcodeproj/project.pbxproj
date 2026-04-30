@@ -26,6 +26,7 @@
 		D574EEB5965493DFA8C68DC6 /* LogTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92CFDF081682E78F12D263DB /* LogTextView.swift */; };
 		D65C724C93CA6F57F1D48917 /* StorageUsage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8266C91A13F97748BA1A66E7 /* StorageUsage.swift */; };
 		D9DF213E8FCAB9E19150ECDC /* LogEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = D61BAAB7D7CFE010A233B518 /* LogEvent.swift */; };
+		F4CC5730706AE9E5C2169847 /* SelectedBuilderRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD6981CFA60A3CFFC47969B4 /* SelectedBuilderRuntime.swift */; };
 		F5F2067B68EC381B8D515086 /* LogWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8BF14F272CC999F8BF0E626 /* LogWindowController.swift */; };
 /* End PBXBuildFile section */
 
@@ -41,6 +42,7 @@
 		92CFDF081682E78F12D263DB /* LogTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogTextView.swift; sourceTree = "<group>"; };
 		AE6356A493ADF9F4EB5367E5 /* LoginItemManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginItemManager.swift; sourceTree = "<group>"; };
 		B74951F61660E212A4369A99 /* apple-buildkit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "apple-buildkit"; path = .; sourceTree = SOURCE_ROOT; };
+		BD6981CFA60A3CFFC47969B4 /* SelectedBuilderRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectedBuilderRuntime.swift; sourceTree = "<group>"; };
 		C8BF14F272CC999F8BF0E626 /* LogWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogWindowController.swift; sourceTree = "<group>"; };
 		CA883ACE2B7E6EA5C438F67C /* SettingsWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindowView.swift; sourceTree = "<group>"; };
 		CC04DD925107E36490C76675 /* SettingsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindowController.swift; sourceTree = "<group>"; };
@@ -97,6 +99,7 @@
 				92CFDF081682E78F12D263DB /* LogTextView.swift */,
 				C8BF14F272CC999F8BF0E626 /* LogWindowController.swift */,
 				079AE4308C241EA8041303D6 /* PrerequisiteCheck.swift */,
+				BD6981CFA60A3CFFC47969B4 /* SelectedBuilderRuntime.swift */,
 				CC04DD925107E36490C76675 /* SettingsWindowController.swift */,
 				CA883ACE2B7E6EA5C438F67C /* SettingsWindowView.swift */,
 				8266C91A13F97748BA1A66E7 /* StorageUsage.swift */,
@@ -208,6 +211,7 @@
 				9E38E529D4212934120FA3A8 /* LoginItemManager.swift in Sources */,
 				B53C03DA415F9FAB56D43FF1 /* LogsWindowView.swift in Sources */,
 				B03E491C4F00485DE9346D3B /* PrerequisiteCheck.swift in Sources */,
+				F4CC5730706AE9E5C2169847 /* SelectedBuilderRuntime.swift in Sources */,
 				4FF6FBB69A273CD06E380137 /* SettingsWindowController.swift in Sources */,
 				2CFF7ED62F0B3CF63D7AF43B /* SettingsWindowView.swift in Sources */,
 				D65C724C93CA6F57F1D48917 /* StorageUsage.swift in Sources */,

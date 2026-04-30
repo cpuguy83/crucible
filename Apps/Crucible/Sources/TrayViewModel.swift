@@ -4,7 +4,7 @@ import BuildKitContainerization
 import BuildKitContainerCLI
 import os
 
-/// Bridges `BuildKitSupervisor` (actor, async) to SwiftUI (`ObservableObject`,
+/// Bridges the selected builder runtime (actor-backed, async) to SwiftUI (`ObservableObject`,
 /// main-thread). All published properties are mutated on the main actor.
 @MainActor
 final class TrayViewModel: ObservableObject {
@@ -27,7 +27,7 @@ final class TrayViewModel: ObservableObject {
 
     private static let log = Logger(subsystem: "com.cpuguy83.Crucible", category: "tray")
 
-    private let supervisor: BuildKitSupervisor
+    private var runtime: SelectedBuilderRuntime
     private let buildx = BuildxIntegration()
     private var subscriberTask: Task<Void, Never>?
     private var activeBuildRefreshTask: Task<Void, Never>?
@@ -40,27 +40,22 @@ final class TrayViewModel: ObservableObject {
 
     init() {
         let appSettings = AppSettingsStore.load()
-        let settings = appSettings.selectedManagedSettings
+        let settings = appSettings.selectedBuildKitSettings
         self.appSettings = appSettings
         self.appliedSettings = settings
         self.settingsDraft = settings
         self.launchAtLoginEnabled = LoginItemManager.isEnabled
-        self.supervisor = BuildKitSupervisor(settings: settings) { s in
-            switch s.backend {
-            case .containerization:
-                return ContainerizationBackend(settings: s)
-            case .containerCLI:
-                return ContainerCLIBackend(settings: s)
-            }
-        }
+        self.runtime = Self.makeRuntime(appSettings: appSettings)
+        self.state = runtime.initialState
 
         refreshStorageUsage()
-        if settings.autoStart {
+        if runtime.supportsBuildKitOperations && settings.autoStart {
             Task { await self.start() }
         }
     }
 
     var canStart: Bool {
+        guard runtime.supportsLifecycle else { return false }
         switch state {
         case .stopped, .error:
             return true
@@ -70,6 +65,7 @@ final class TrayViewModel: ObservableObject {
     }
 
     var canStop: Bool {
+        guard runtime.supportsLifecycle else { return false }
         switch state {
         case .running, .degraded:
             return true
@@ -79,6 +75,7 @@ final class TrayViewModel: ObservableObject {
     }
 
     var canRestart: Bool {
+        guard runtime.supportsLifecycle else { return false }
         switch state {
         case .running, .degraded, .error, .stopped:
             return true
@@ -88,6 +85,7 @@ final class TrayViewModel: ObservableObject {
     }
 
     var canResetState: Bool {
+        guard runtime.supportsBuildKitOperations else { return false }
         switch state {
         case .stopped, .error:
             return true
@@ -97,7 +95,7 @@ final class TrayViewModel: ObservableObject {
     }
 
     var canPullImage: Bool {
-        !settingsDirty && !settingsApplyBlocked && BuildKitSettingsValidator.validate(appliedSettings).isEmpty
+        runtime.supportsBuildKitOperations && !settingsDirty && !settingsApplyBlocked && BuildKitSettingsValidator.validate(appliedSettings).isEmpty
     }
 
     var canFactoryReset: Bool {
@@ -203,7 +201,7 @@ final class TrayViewModel: ObservableObject {
 
     func start() async {
         await subscribeBackendStreamsIfNeeded()
-        await run("start") { try await self.supervisor.start() }
+        await run("start") { try await self.runtime.start() }
     }
 
     func startFromMenu() {
@@ -211,14 +209,14 @@ final class TrayViewModel: ObservableObject {
     }
 
     func stop() {
-        Task { await run("stop") { try await self.supervisor.stop() } }
+        Task { await run("stop") { try await self.runtime.stop() } }
     }
 
     func shutdownForTermination() async {
         logStore.append(source: .supervisor, level: .info, "Application terminating; stopping BuildKit")
         do {
-            try await supervisor.stop()
-            state = await supervisor.currentState()
+            try await runtime.stop()
+            state = await runtime.currentState()
             lastError = nil
             logStore.append(source: .supervisor, level: .info, "BuildKit stopped")
         } catch {
@@ -232,7 +230,7 @@ final class TrayViewModel: ObservableObject {
     func restart() {
         Task {
             await self.subscribeBackendStreamsIfNeeded()
-            await run("restart") { try await self.supervisor.restart() }
+            await run("restart") { try await self.runtime.restart() }
         }
     }
 
@@ -240,8 +238,8 @@ final class TrayViewModel: ObservableObject {
         Task {
             await self.subscribeBackendStreamsIfNeeded()
             do {
-                try await self.supervisor.pullImage()
-                self.state = await supervisor.currentState()
+                try await self.runtime.pullImage()
+                self.state = await runtime.currentState()
                 self.lastError = nil
                 self.refreshStorageUsage()
                 self.logStore.append(source: .supervisor, level: .info, "Pulled \(self.appliedSettings.imageReference)")
@@ -264,7 +262,7 @@ final class TrayViewModel: ObservableObject {
             message: "This stops BuildKit and deletes the persistent cache/metadata image. All cached build layers will be lost.",
             confirmTitle: "Reset State"
         ) else { return }
-        Task { await run("resetState") { try await self.supervisor.resetState() } }
+        Task { await run("resetState") { try await self.runtime.resetState() } }
     }
 
     func resetConfiguration() {
@@ -277,9 +275,9 @@ final class TrayViewModel: ObservableObject {
         Task {
             do {
                 let defaultAppSettings = AppSettings()
-                let defaults = defaultAppSettings.selectedManagedSettings
+                let defaults = defaultAppSettings.selectedBuildKitSettings
                 let shouldRestart = self.isRunning
-                try await self.supervisor.updateSettings(defaults)
+                self.runtime = Self.makeRuntime(appSettings: defaultAppSettings)
                 try AppSettingsStore.delete()
                 try? LoginItemManager.setEnabled(false)
                 self.appSettings = defaultAppSettings
@@ -295,7 +293,7 @@ final class TrayViewModel: ObservableObject {
                 self.activeBuildsStatus = .notChecked
                 self.recentBuilds = []
                 self.recentBuildsStatus = .notChecked
-                self.state = await supervisor.currentState()
+                self.state = await runtime.currentState()
                 self.lastError = nil
                 self.logStore.append(source: .supervisor, level: .info, "Configuration reset to defaults")
                 if shouldRestart || defaults.autoStart {
@@ -316,14 +314,14 @@ final class TrayViewModel: ObservableObject {
 
         Task {
             do {
-                try await self.supervisor.stop()
+                try await self.runtime.stop()
                 let settings = self.appliedSettings
-                let appSettings = self.appSettings.replacingSelectedManagedSettings(settings)
+                let appSettings = self.appSettings.replacingSelectedBuildKitSettings(settings)
                 self.appSettings = appSettings
                 try AppSettingsStore.save(appSettings)
                 try self.removeAppSupportDataPreservingSettings()
                 try AppSettingsStore.save(appSettings)
-                try await self.supervisor.updateSettings(settings)
+                self.runtime = Self.makeRuntime(appSettings: appSettings)
                 self.finishReset(settings: settings, message: "Local state reset")
             } catch {
                 self.reportResetFailure("reset local state", error)
@@ -340,7 +338,7 @@ final class TrayViewModel: ObservableObject {
 
         Task {
             do {
-                try await self.supervisor.stop()
+                try await self.runtime.stop()
                 try? LoginItemManager.setEnabled(false)
                 try AppSettingsStore.delete()
                 let root = StorageUsage.appSupportDirectory()
@@ -349,8 +347,8 @@ final class TrayViewModel: ObservableObject {
                 }
 
                 let defaultAppSettings = AppSettings()
-                let defaults = defaultAppSettings.selectedManagedSettings
-                try await self.supervisor.updateSettings(defaults)
+                let defaults = defaultAppSettings.selectedBuildKitSettings
+                self.runtime = Self.makeRuntime(appSettings: defaultAppSettings)
                 self.appSettings = defaultAppSettings
                 self.launchAtLoginEnabled = LoginItemManager.isEnabled
                 self.finishReset(settings: defaults, message: "Factory reset complete")
@@ -382,7 +380,7 @@ final class TrayViewModel: ObservableObject {
         recentBuilds = []
         recentBuildsStatus = .notChecked
         Task {
-            self.state = await supervisor.currentState()
+            self.state = await runtime.currentState()
             self.lastError = nil
             self.refreshStorageUsage()
             self.logStore.append(source: .supervisor, level: .info, message)
@@ -641,10 +639,10 @@ final class TrayViewModel: ObservableObject {
         Task {
             do {
                 let shouldRestart = self.isRunning
-                try await self.supervisor.updateSettings(newSettings)
-                let appSettings = self.appSettings.replacingSelectedManagedSettings(newSettings)
+                let appSettings = self.appSettings.replacingSelectedBuildKitSettings(newSettings)
                 try AppSettingsStore.save(appSettings)
                 self.appSettings = appSettings
+                self.runtime = Self.makeRuntime(appSettings: appSettings)
                 self.appliedSettings = newSettings
                 self.subscribedToBackend = false
                 self.subscriberTask?.cancel()
@@ -655,7 +653,7 @@ final class TrayViewModel: ObservableObject {
                 self.activeBuildsStatus = .notChecked
                 self.recentBuilds = []
                 self.recentBuildsStatus = .notChecked
-                self.state = await supervisor.currentState()
+                self.state = await runtime.currentState()
                 let notice = shouldRestart ? "Applied settings; restarting BuildKit" : "Applied settings"
                 self.lastError = nil
                 self.logStore.append(source: .supervisor, level: .info, notice)
@@ -1018,7 +1016,7 @@ final class TrayViewModel: ObservableObject {
     }
 
     /// Wire up subscriptions to the backend's three async streams. The
-    /// backend doesn't exist until `supervisor.start()` (or any other
+    /// backend doesn't exist until `runtime.start()` (or any other
     /// op) materializes it, so we re-fetch the streams every call and
     /// cancel any prior subscription task.
     private func subscribeBackendStreamsIfNeeded() async {
@@ -1033,7 +1031,7 @@ final class TrayViewModel: ObservableObject {
             logs: AsyncStream<String>
         )
         do {
-            streams = try await supervisor.streams()
+            streams = try await runtime.streams()
         } catch {
             self.lastError = buildKitUserMessage(for: error)
             return
@@ -1105,7 +1103,7 @@ final class TrayViewModel: ObservableObject {
     private func run(_ label: String, _ op: @escaping () async throws -> Void) async {
         do {
             try await op()
-            self.state = await supervisor.currentState()
+            self.state = await runtime.currentState()
             self.lastError = nil
             self.refreshStorageUsage()
         } catch {
@@ -1133,10 +1131,21 @@ final class TrayViewModel: ObservableObject {
 
     private static func builderKindText(for kind: BuilderKind) -> String {
         switch kind {
-        case .managedBuildKit:
-            return "Managed BuildKit"
-        case .managedDocker:
-            return "Managed Docker daemon"
+        case .buildKit:
+            return "BuildKit"
+        case .docker:
+            return "Docker"
+        }
+    }
+
+    private static func makeRuntime(appSettings: AppSettings) -> SelectedBuilderRuntime {
+        SelectedBuilderRuntime(appSettings: appSettings) { settings in
+            switch settings.backend {
+            case .containerization:
+                return ContainerizationBackend(settings: settings)
+            case .containerCLI:
+                return ContainerCLIBackend(settings: settings)
+            }
         }
     }
 

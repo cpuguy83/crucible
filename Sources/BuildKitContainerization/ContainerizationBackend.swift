@@ -50,7 +50,7 @@ public actor ContainerizationBackend: BuildKitBackend {
 
     public init(settings: BuildKitSettings) {
         self.settings = settings
-        self.appRoot = ContainerizationBackend.defaultAppRoot()
+        self.appRoot = BuilderStoragePaths().root
         (stateStream, stateContinuation) = AsyncStream<BuildKitState>.makeStream()
         (progressStream, progressContinuation) = AsyncStream<BuildKitProgress>.makeStream()
         (logStream, logContinuation) = AsyncStream<String>.makeStream()
@@ -59,9 +59,7 @@ public actor ContainerizationBackend: BuildKitBackend {
     /// `~/Library/Application Support/Crucible/` — image store, content
     /// store, container rootfs files all live under here.
     static func defaultAppRoot() -> URL {
-        let base = FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        return base.appendingPathComponent("Crucible", isDirectory: true)
+        BuilderStoragePaths.defaultAppSupportRoot()
     }
 
     public func currentState() -> BuildKitState { state }
@@ -168,7 +166,7 @@ public actor ContainerizationBackend: BuildKitBackend {
             // EPERM ("failed to convert whiteout file ... operation not
             // permitted"). A real Linux ext4 filesystem handles whiteouts
             // natively.
-            let stateImageURL = appRoot.appendingPathComponent("buildkit-state.ext4")
+            let stateImageURL = BuilderStoragePaths(appSupportRoot: appRoot).buildKitStateImageURL
             try ensureBuildKitStateImage(at: stateImageURL, sizeInBytes: 8.gib())
             // Force VZ to durably persist guest writes:
             //   - vzDiskImageCachingMode=uncached: avoids host page-cache
@@ -311,7 +309,7 @@ public actor ContainerizationBackend: BuildKitBackend {
                 attempted: "resetState"
             )
         }
-        let url = appRoot.appendingPathComponent("buildkit-state.ext4")
+        let url = BuilderStoragePaths(appSupportRoot: appRoot).buildKitStateImageURL
         if FileManager.default.fileExists(atPath: url.path) {
             try FileManager.default.removeItem(at: url)
         }
@@ -385,7 +383,7 @@ public actor ContainerizationBackend: BuildKitBackend {
 
     private func writeDaemonConfigIfNeeded() throws -> URL? {
         let config = settings.effectiveDaemonConfigTOML().trimmingCharacters(in: .whitespacesAndNewlines)
-        let url = appRoot.appendingPathComponent("buildkitd.toml")
+        let url = BuilderStoragePaths(appSupportRoot: appRoot).buildKitDaemonConfigURL
         if config.isEmpty {
             try? FileManager.default.removeItem(at: url)
             return nil

@@ -142,9 +142,7 @@ public actor ContainerCLIBackend: BuildKitBackend {
     }
 
     public static func defaultAppRoot() -> URL {
-        FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("Crucible", isDirectory: true)
+        BuilderStoragePaths.defaultAppSupportRoot()
     }
 
     private func runContainerCLI(_ arguments: [String]) async throws -> String {

@@ -128,8 +128,7 @@ public struct BuildKitSettings: Sendable, Equatable, Codable {
     }
 
     public static func defaultHostSocketPath() -> String {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        return "\(home)/Library/Application Support/Crucible/buildkitd.sock"
+        BuilderStoragePaths().buildKitSocketURL.path
     }
 
     public func effectiveDaemonConfigTOML() -> String {
