@@ -466,6 +466,8 @@ struct BuilderStoragePathsTests {
         #expect(paths.buildKitDaemonConfigURL.path == "/tmp/Crucible/builders/docker/buildkitd.toml")
         #expect(paths.dockerSocketURL.path == "/tmp/Crucible/builders/docker/docker.sock")
         #expect(paths.dockerDataRootURL.path == "/tmp/Crucible/builders/docker/docker-data")
+        #expect(paths.dockerDataImageURL.path == "/tmp/Crucible/builders/docker/docker-data.ext4")
+        #expect(paths.dockerDataImageVersionURL.path == "/tmp/Crucible/builders/docker/docker-data.version")
     }
 
     @Test func defaultBuildKitSocketMatchesSettingsDefault() {

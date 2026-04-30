@@ -6,6 +6,7 @@ struct SettingsWindowView: View {
     @ObservedObject var viewModel: TrayViewModel
     @State private var selection: SettingsSection = .general
     @State private var selectedBuildID: String?
+    @State private var showingAddBuilder = false
     private let hostLimits = HostResourceLimits.current()
 
     var body: some View {
@@ -168,11 +169,22 @@ struct SettingsWindowView: View {
                             }
                         }
                     }
-                    if !viewModel.hasDockerBuilder {
-                        Button("Add Docker Builder", action: viewModel.addDockerBuilder)
-                            .disabled(!viewModel.canSwitchBuilders)
-                    }
                 }
+                Divider()
+                HStack {
+                    Button("Add Builder") { showingAddBuilder = true }
+                        .disabled(!viewModel.canAddBuilder)
+                    Spacer()
+                }
+            }
+            .confirmationDialog("Add Builder", isPresented: $showingAddBuilder) {
+                Button("BuildKit") { viewModel.addBuildKitBuilder() }
+                    .disabled(viewModel.hasAdditionalBuildKitBuilder)
+                Button("Docker") { viewModel.addDockerBuilder() }
+                    .disabled(viewModel.hasDockerBuilder)
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Choose the kind of builder Crucible should create.")
             }
 
             if viewModel.selectedBuilderKindText == "Docker" {

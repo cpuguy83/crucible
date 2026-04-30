@@ -326,7 +326,11 @@ public actor ContainerizationBackend: BuildKitBackend {
     /// This avoids `container.exec(...)` entirely, which adds a dependency
     /// on vminitd's exec subsystem being ready and a working `buildctl` in
     /// the image at the path we guess.
-    static func runHealthCheck(hostSocketPath: String, timeoutSeconds: Double = 60) async throws {
+    public static func runHealthCheck(
+        hostSocketPath: String,
+        timeoutSeconds: Double = 60,
+        serviceName: String = "buildkitd"
+    ) async throws {
         let deadline = Date().addingTimeInterval(timeoutSeconds)
         var lastError: String = "no attempt completed"
         while Date() < deadline {
@@ -338,7 +342,7 @@ public actor ContainerizationBackend: BuildKitBackend {
             try? await Task.sleep(nanoseconds: 250_000_000)
         }
         throw BuildKitBackendError.healthCheckFailed(
-            "buildkitd did not become reachable on \(hostSocketPath) within \(Int(timeoutSeconds))s: \(lastError)"
+            "\(serviceName) did not become reachable on \(hostSocketPath) within \(Int(timeoutSeconds))s: \(lastError)"
         )
     }
 
@@ -423,11 +427,15 @@ public actor ContainerizationBackend: BuildKitBackend {
     /// exist. The file is sparse — `sizeInBytes` is the maximum capacity
     /// the guest sees, not the on-disk footprint, which grows lazily as
     /// buildkitd writes data.
-    private func ensureBuildKitStateImage(at url: URL, sizeInBytes: UInt64) throws {
-        let versionURL = url.deletingLastPathComponent().appendingPathComponent("buildkit-state.version")
+    public static func ensureExt4StateImage(
+        at url: URL,
+        versionURL: URL,
+        version: String,
+        sizeInBytes: UInt64
+    ) throws {
         let existingVersion = try? String(contentsOf: versionURL, encoding: .utf8)
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        if existingVersion != Self.stateImageVersion {
+        if existingVersion != version {
             try? FileManager.default.removeItem(at: url)
         }
 
@@ -447,7 +455,16 @@ public actor ContainerizationBackend: BuildKitBackend {
         try handle.synchronize()
         try handle.close()
 
-        try Self.stateImageVersion.write(to: versionURL, atomically: true, encoding: .utf8)
+        try version.write(to: versionURL, atomically: true, encoding: .utf8)
+    }
+
+    private func ensureBuildKitStateImage(at url: URL, sizeInBytes: UInt64) throws {
+        try Self.ensureExt4StateImage(
+            at: url,
+            versionURL: url.deletingLastPathComponent().appendingPathComponent("buildkit-state.version"),
+            version: Self.stateImageVersion,
+            sizeInBytes: sizeInBytes
+        )
     }
 
     /// Removes `containers/<id>/` if it exists. Used at the start of every

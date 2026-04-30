@@ -153,7 +153,15 @@ final class TrayViewModel: ObservableObject {
 
     var canSwitchBuilders: Bool { !isRunning && !settingsApplyBlocked }
 
+    var canAddBuilder: Bool { canSwitchBuilders && (!hasDockerBuilder || !hasAdditionalBuildKitBuilder) }
+
     var hasDockerBuilder: Bool { appSettings.builders.contains { if case .docker = $0.kind { return true }; return false } }
+
+    var hasAdditionalBuildKitBuilder: Bool {
+        appSettings.builders.contains { builder in
+            builder.id != BuilderConfig.defaultBuildKitID && builder.isBuildKit
+        }
+    }
 
     var dockerSettingsDirty: Bool {
         guard case .docker(let settings) = appSettings.selectedBuilder.kind else { return false }
@@ -712,13 +720,21 @@ final class TrayViewModel: ObservableObject {
 
     func addDockerBuilder() {
         guard canSwitchBuilders else { return }
-        var next = appSettings.upsertingBuilder(.docker(id: "docker", name: "Docker"), select: true)
-        if next.builders.filter({ $0.id == "docker" }).count > 1 {
-            next = next.selectingBuilder(id: "docker")
-        }
-        applyAppSettings(next)
+        let next = appSettings.upsertingBuilder(.docker(id: "docker", name: "Docker"), select: true)
+        saveAndApplyAppSettings(next)
+    }
+
+    func addBuildKitBuilder() {
+        guard canSwitchBuilders else { return }
+        let settings = BuildKitSettings(hostSocketPath: BuilderStoragePaths(builderID: "buildkit").buildKitSocketURL.path)
+        let next = appSettings.upsertingBuilder(.buildKit(id: "buildkit", name: "BuildKit", settings: settings), select: true)
+        saveAndApplyAppSettings(next)
+    }
+
+    private func saveAndApplyAppSettings(_ settings: AppSettings) {
+        applyAppSettings(settings)
         do {
-            try AppSettingsStore.save(next)
+            try AppSettingsStore.save(settings)
         } catch {
             lastError = buildKitUserMessage(for: error)
         }

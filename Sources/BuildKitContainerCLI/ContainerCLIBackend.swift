@@ -257,21 +257,16 @@ public enum ContainerCLICommands {
         statePath: String,
         configDirectoryPath: String?
     ) -> Command {
-        var args = [
-            "run",
-            "--detach",
-            "--name", containerID,
-            "--init",
-            "--cpus", "\(settings.cpuCount)",
-            "--memory", "\(settings.memoryMiB)M",
-            "--publish-socket", "\(settings.hostSocketPath):/run/buildkit/buildkitd.sock",
-            "--mount", "type=bind,source=\(statePath),target=/var/lib/buildkit",
-        ]
-
-        if let kernelOverridePath = settings.kernelOverridePath, !kernelOverridePath.isEmpty {
-            args.append(contentsOf: ["--kernel", kernelOverridePath])
-        }
-        args.append("--rosetta")
+        var args = runDetachedDaemonContainerArgs(
+            containerID: containerID,
+            cpuCount: settings.cpuCount,
+            memoryMiB: settings.memoryMiB,
+            kernelOverridePath: settings.kernelOverridePath,
+            hostSocketPath: settings.hostSocketPath,
+            guestSocketPath: "/run/buildkit/buildkitd.sock",
+            statePath: statePath,
+            guestStatePath: "/var/lib/buildkit"
+        )
         if let configDirectoryPath {
             args.append(contentsOf: [
                 "--mount", "type=bind,source=\(configDirectoryPath),target=/etc/buildkit,readonly",
@@ -286,29 +281,31 @@ public enum ContainerCLICommands {
         return .init(executable: binary, arguments: args)
     }
 
-    public static func runDetachedDocker(
-        binary: String,
+    private static func runDetachedDaemonContainerArgs(
         containerID: String,
-        settings: DockerSettings,
-        socketPath: String,
-        dataRootPath: String
-    ) -> Command {
-        let args = [
+        cpuCount: Int,
+        memoryMiB: Int,
+        kernelOverridePath: String?,
+        hostSocketPath: String,
+        guestSocketPath: String,
+        statePath: String,
+        guestStatePath: String
+    ) -> [String] {
+        var args = [
             "run",
             "--detach",
             "--name", containerID,
             "--init",
-            "--privileged",
-            "--env", "DOCKER_TLS_CERTDIR=",
-            "--publish-socket", "\(socketPath):/var/run/docker.sock",
-            "--mount", "type=bind,source=\(dataRootPath),target=/var/lib/docker",
-            "--rosetta",
-            settings.imageReference,
-            "dockerd",
-            "--host", "unix:///var/run/docker.sock",
-            "--data-root", "/var/lib/docker",
+            "--cpus", "\(cpuCount)",
+            "--memory", "\(memoryMiB)M",
+            "--publish-socket", "\(hostSocketPath):\(guestSocketPath)",
+            "--mount", "type=bind,source=\(statePath),target=\(guestStatePath)",
         ]
-        return .init(executable: binary, arguments: args)
+        if let kernelOverridePath, !kernelOverridePath.isEmpty {
+            args.append(contentsOf: ["--kernel", kernelOverridePath])
+        }
+        args.append("--rosetta")
+        return args
     }
 
     public static func pullImage(binary: String, image: String) -> Command {

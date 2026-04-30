@@ -41,6 +41,14 @@ public struct BuilderStoragePaths: Sendable, Equatable {
         root.appendingPathComponent("docker-data", isDirectory: true)
     }
 
+    public var dockerDataImageURL: URL {
+        root.appendingPathComponent("docker-data.ext4")
+    }
+
+    public var dockerDataImageVersionURL: URL {
+        root.appendingPathComponent("docker-data.version")
+    }
+
     public static func defaultAppSupportRoot() -> URL {
         FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!

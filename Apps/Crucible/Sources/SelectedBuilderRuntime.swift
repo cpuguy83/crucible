@@ -1,5 +1,6 @@
 import Foundation
 import BuildKitCore
+import BuildKitContainerization
 import BuildKitContainerCLI
 
 struct SelectedBuilderRuntime {
@@ -7,7 +8,7 @@ struct SelectedBuilderRuntime {
 
     private enum Implementation {
         case buildKit(BuildKitSupervisor)
-        case docker(DockerContainerCLIBackend)
+        case docker(DockerContainerizationBackend)
     }
 
     private let implementation: Implementation
@@ -17,7 +18,7 @@ struct SelectedBuilderRuntime {
         case .buildKit(let settings):
             self.implementation = .buildKit(BuildKitSupervisor(settings: settings, factory: backendFactory))
         case .docker(let settings):
-            self.implementation = .docker(DockerContainerCLIBackend(
+            self.implementation = .docker(DockerContainerizationBackend(
                 settings: settings,
                 paths: BuilderStoragePaths(builderID: appSettings.selectedBuilder.id)
             ))
