@@ -18,6 +18,19 @@ struct BuildxCommandsTests {
         #expect(line.hasSuffix(".sock'"))
     }
 
+    @Test func dockerContextCommandUsesDockerHost() {
+        let cmd = BuildxCommands.dockerContextCreateCommand(for: endpoint, contextName: "crucible")
+        #expect(cmd == "docker context create crucible --docker 'host=unix:///Users/me/Library/Application%20Support/Crucible/buildkitd.sock'")
+    }
+
+    @Test func dockerContextArgumentsKeepRawPath() {
+        let args = BuildxCommands.dockerContextCreateArguments(for: endpoint, contextName: "crucible")
+        #expect(args == [
+            "context", "create", "crucible",
+            "--docker", "host=unix:///Users/me/Library/Application Support/Crucible/buildkitd.sock",
+        ])
+    }
+
     @Test func dockerBuildxCreateCommandIncludesUseByDefault() {
         let cmd = BuildxCommands.dockerBuildxCreateCommand(for: endpoint)
         #expect(cmd.contains("--name crucible"))
@@ -50,6 +63,16 @@ struct BuildxCommandsTests {
             "--name", "test-builder",
             "--driver", "remote",
             "unix:///Users/me/Library/Application Support/Crucible/buildkitd.sock",
+        ])
+    }
+
+    @Test func dockerBuildxBuilderUsesDockerContainerDriverAndContext() {
+        let args = BuildxCommands.dockerBuildxCreateDockerArguments(builderName: "crucible", contextName: "crucible")
+        #expect(args == [
+            "buildx", "create",
+            "--name", "crucible",
+            "--driver", "docker-container",
+            "crucible",
         ])
     }
 

@@ -36,6 +36,39 @@ public enum BuildxCommands {
         "BUILDKIT_HOST='\(unixURL(for: endpoint))'"
     }
 
+    public static func dockerHostEnv(for endpoint: BuildKitEndpoint) -> String {
+        "DOCKER_HOST='\(unixURL(for: endpoint))'"
+    }
+
+    public static func dockerContextCreateCommand(
+        for endpoint: BuildKitEndpoint,
+        contextName: String = BuildxCommands.defaultBuilderName
+    ) -> String {
+        "docker context create \(contextName) --docker 'host=\(unixURL(for: endpoint))'"
+    }
+
+    public static func dockerContextCreateArguments(
+        for endpoint: BuildKitEndpoint,
+        contextName: String = BuildxCommands.defaultBuilderName
+    ) -> [String] {
+        [
+            "context", "create", contextName,
+            "--docker", "host=unix://\(endpoint.socketPath)",
+        ]
+    }
+
+    public static func dockerContextInspectArguments(contextName: String = BuildxCommands.defaultBuilderName) -> [String] {
+        ["context", "inspect", contextName]
+    }
+
+    public static func dockerContextUseArguments(contextName: String = BuildxCommands.defaultBuilderName) -> [String] {
+        ["context", "use", contextName]
+    }
+
+    public static func dockerContextRemoveArguments(contextName: String = BuildxCommands.defaultBuilderName) -> [String] {
+        ["context", "rm", contextName]
+    }
+
     /// `docker buildx create ...` invocation as a single shell line.
     /// The endpoint URL is single-quoted; the builder name is interpolated
     /// directly because we control its character set.
@@ -66,6 +99,30 @@ public enum BuildxCommands {
             "--name", builderName,
             "--driver", "remote",
             "unix://\(endpoint.socketPath)",
+        ]
+    }
+
+    public static func dockerBuildxCreateDockerCommand(
+        builderName: String = BuildxCommands.defaultBuilderName,
+        contextName: String = BuildxCommands.defaultBuilderName,
+        useAfterCreate: Bool = true
+    ) -> String {
+        var line = "docker buildx create --name \(builderName) --driver docker-container \(contextName)"
+        if useAfterCreate {
+            line += " && docker buildx use \(builderName)"
+        }
+        return line
+    }
+
+    public static func dockerBuildxCreateDockerArguments(
+        builderName: String = BuildxCommands.defaultBuilderName,
+        contextName: String = BuildxCommands.defaultBuilderName
+    ) -> [String] {
+        [
+            "buildx", "create",
+            "--name", builderName,
+            "--driver", "docker-container",
+            contextName,
         ]
     }
 

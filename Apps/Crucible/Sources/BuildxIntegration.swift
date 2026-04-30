@@ -59,6 +59,14 @@ actor BuildxIntegration {
         case failed(stderr: String, exitCode: Int32)
     }
 
+    enum ContextResult: Sendable {
+        case created(contextName: String)
+        case alreadyExists(contextName: String)
+        case dockerNotFound
+        case failed(stderr: String, exitCode: Int32)
+        case useFailed(stderr: String, exitCode: Int32)
+    }
+
     /// Cached docker binary path; nil means "not yet probed".
     private var cachedDockerPath: String?
 
@@ -195,6 +203,98 @@ actor BuildxIntegration {
             return .notRegistered(builderName: builderName)
         }
         return .failed(stderr: combined, exitCode: output.exitCode)
+    }
+
+    func installDockerContext(
+        endpoint: BuildKitEndpoint,
+        contextName: String = BuildxCommands.defaultBuilderName,
+        useAsDefault: Bool = true
+    ) async -> ContextResult {
+        guard let docker = await locateDocker() else { return .dockerNotFound }
+
+        let inspect = await runCapturing(
+            executable: docker,
+            arguments: BuildxCommands.dockerContextInspectArguments(contextName: contextName)
+        )
+        if inspect?.exitCode == 0 {
+            if useAsDefault {
+                if let use = await runCapturing(executable: docker, arguments: BuildxCommands.dockerContextUseArguments(contextName: contextName)),
+                   use.exitCode != 0
+                {
+                    return .useFailed(stderr: use.stdout + use.stderr, exitCode: use.exitCode)
+                }
+            }
+            return .alreadyExists(contextName: contextName)
+        }
+
+        let create = await runCapturing(
+            executable: docker,
+            arguments: BuildxCommands.dockerContextCreateArguments(for: endpoint, contextName: contextName)
+        )
+        guard let create, create.exitCode == 0 else {
+            return .failed(stderr: create?.stderr ?? "no output", exitCode: create?.exitCode ?? -1)
+        }
+
+        if useAsDefault {
+            if let use = await runCapturing(executable: docker, arguments: BuildxCommands.dockerContextUseArguments(contextName: contextName)),
+               use.exitCode != 0
+            {
+                return .useFailed(stderr: use.stdout + use.stderr, exitCode: use.exitCode)
+            }
+        }
+        return .created(contextName: contextName)
+    }
+
+    func installDockerBackedBuildx(
+        endpoint: BuildKitEndpoint,
+        builderName: String = BuildxCommands.defaultBuilderName,
+        contextName: String = BuildxCommands.defaultBuilderName,
+        useAsDefault: Bool = true
+    ) async -> InstallResult {
+        let contextResult = await installDockerContext(endpoint: endpoint, contextName: contextName, useAsDefault: false)
+        switch contextResult {
+        case .created, .alreadyExists:
+            break
+        case .dockerNotFound:
+            return .dockerNotFound
+        case .failed(let stderr, let exitCode):
+            return .failed(stderr: stderr, exitCode: exitCode)
+        case .useFailed(let stderr, let exitCode):
+            return .useFailed(stderr: stderr, exitCode: exitCode)
+        }
+
+        guard let docker = await locateDocker() else { return .dockerNotFound }
+        let inspect = await runCapturing(
+            executable: docker,
+            arguments: BuildxCommands.dockerBuildxInspectArguments(builderName: builderName)
+        )
+        if inspect?.exitCode == 0 {
+            if useAsDefault {
+                if let use = await runCapturing(executable: docker, arguments: ["buildx", "use", builderName]),
+                   use.exitCode != 0
+                {
+                    return .useFailed(stderr: use.stdout + use.stderr, exitCode: use.exitCode)
+                }
+            }
+            return .alreadyExists(builderName: builderName)
+        }
+
+        let create = await runCapturing(
+            executable: docker,
+            arguments: BuildxCommands.dockerBuildxCreateDockerArguments(builderName: builderName, contextName: contextName)
+        )
+        guard let create, create.exitCode == 0 else {
+            return .failed(stderr: create?.stderr ?? "no output", exitCode: create?.exitCode ?? -1)
+        }
+
+        if useAsDefault {
+            if let use = await runCapturing(executable: docker, arguments: ["buildx", "use", builderName]),
+               use.exitCode != 0
+            {
+                return .useFailed(stderr: use.stdout + use.stderr, exitCode: use.exitCode)
+            }
+        }
+        return .created(builderName: builderName)
     }
 
     func recreate(

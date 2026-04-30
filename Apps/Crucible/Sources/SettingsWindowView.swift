@@ -491,10 +491,13 @@ struct SettingsWindowView: View {
     private var dockerSocketIntegrationCard: some View {
         card("Docker CLI") {
             metricRow("Socket", viewModel.displayedSocketPath ?? "Not available")
-            Text("Use the selected Docker builder by pointing Docker-compatible tools at Crucible's Docker socket while the builder is running.")
+            metricRow("Context", viewModel.dockerContextName)
+            Text("Use the selected Docker builder by pointing Docker-compatible tools at Crucible's Docker socket while the builder is running, or create a Docker context for it.")
                 .foregroundStyle(.secondary)
                 .font(.callout)
             HStack {
+                Button("Create and Use Context", action: viewModel.createDockerContext)
+                    .disabled(viewModel.dockerEndpoint == nil)
                 Button("Copy DOCKER_HOST env", action: viewModel.copyDockerHostEnv)
                     .disabled(viewModel.dockerEndpoint == nil)
                 Button("Copy Docker context command", action: viewModel.copyDockerContextCreateCommand)
@@ -505,9 +508,15 @@ struct SettingsWindowView: View {
 
     private var dockerBuildxIntegrationCard: some View {
         card("Docker Buildx") {
-            Text("Docker buildx can use the Docker daemon socket directly through `DOCKER_HOST` or a Docker context. Crucible does not create a separate remote BuildKit builder for Docker-backed builders yet.")
+            metricRow("Builder", viewModel.buildxBuilderName)
+            Text("Create a docker-container buildx builder that targets the selected Docker builder through Crucible's Docker context.")
                 .foregroundStyle(.secondary)
                 .font(.callout)
+            HStack {
+                Button("Create and Use Buildx Builder", action: viewModel.createDockerBackedBuildxBuilder)
+                    .disabled(viewModel.dockerEndpoint == nil)
+                Button("Copy buildx create command", action: viewModel.copyDockerBuildxCreateCommand)
+            }
             if viewModel.dockerEndpoint == nil {
                 Text("Start the Docker builder to expose its socket.")
                     .font(.caption)

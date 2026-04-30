@@ -172,6 +172,8 @@ final class TrayViewModel: ObservableObject {
 
     private var buildxBuilderNameForCommands: String { appSettings.buildxName }
 
+    var dockerContextName: String { appSettings.buildxName }
+
     var supportsBuildKitOperations: Bool { runtime.supportsBuildKitOperations }
 
     var supportsRawBuildKitEndpoint: Bool { runtime.supportsRawBuildKitEndpoint }
@@ -1090,16 +1092,83 @@ final class TrayViewModel: ObservableObject {
 
     func copyDockerHostEnv() {
         guard let ep = dockerEndpoint else { return }
-        let url = BuildxCommands.unixURL(for: BuildKitEndpoint(socketPath: ep.socketPath))
-        copyToPasteboard("DOCKER_HOST='\(url)'")
+        copyToPasteboard(BuildxCommands.dockerHostEnv(for: BuildKitEndpoint(socketPath: ep.socketPath)))
         logStore.append(source: .buildx, level: .info, "Copied DOCKER_HOST env")
     }
 
     func copyDockerContextCreateCommand() {
         guard let ep = dockerEndpoint else { return }
-        let url = BuildxCommands.unixURL(for: BuildKitEndpoint(socketPath: ep.socketPath))
-        copyToPasteboard("docker context create crucible --docker 'host=\(url)'")
+        copyToPasteboard(BuildxCommands.dockerContextCreateCommand(
+            for: BuildKitEndpoint(socketPath: ep.socketPath),
+            contextName: dockerContextName
+        ))
         logStore.append(source: .buildx, level: .info, "Copied docker context create command")
+    }
+
+    func copyDockerBuildxCreateCommand() {
+        copyToPasteboard(BuildxCommands.dockerBuildxCreateDockerCommand(
+            builderName: buildxBuilderNameForCommands,
+            contextName: dockerContextName
+        ))
+        logStore.append(source: .buildx, level: .info, "Copied Docker-backed buildx create command")
+    }
+
+    func createDockerContext() {
+        guard let ep = dockerEndpoint else { return }
+        let endpoint = BuildKitEndpoint(socketPath: ep.socketPath)
+        let contextName = dockerContextName
+        Task { [buildx] in
+            let result = await buildx.installDockerContext(endpoint: endpoint, contextName: contextName)
+            await MainActor.run {
+                switch result {
+                case .created(let name):
+                    self.lastError = nil
+                    self.logStore.append(source: .buildx, level: .info, "Created Docker context '\(name)'")
+                case .alreadyExists(let name):
+                    self.lastError = nil
+                    self.logStore.append(source: .buildx, level: .info, "Docker context '\(name)' already exists (set as default)")
+                case .dockerNotFound:
+                    self.lastError = "docker not found. Install Docker CLI, or copy the command and run it in a shell."
+                    self.logStore.append(source: .buildx, level: .error, self.lastError ?? "")
+                case .failed(let stderr, let code):
+                    self.lastError = "docker context create failed (exit \(code)):\n\(stderr)"
+                    self.logStore.append(source: .buildx, level: .error, self.lastError ?? "")
+                case .useFailed(let stderr, let code):
+                    self.lastError = "docker context use failed (exit \(code)):\n\(stderr)"
+                    self.logStore.append(source: .buildx, level: .error, self.lastError ?? "")
+                }
+            }
+        }
+    }
+
+    func createDockerBackedBuildxBuilder() {
+        guard let ep = dockerEndpoint else { return }
+        let endpoint = BuildKitEndpoint(socketPath: ep.socketPath)
+        let builderName = buildxBuilderNameForCommands
+        let contextName = dockerContextName
+        Task { [buildx] in
+            let result = await buildx.installDockerBackedBuildx(endpoint: endpoint, builderName: builderName, contextName: contextName)
+            await MainActor.run {
+                switch result {
+                case .created(let name):
+                    self.lastError = nil
+                    self.logStore.append(source: .buildx, level: .info, "Created Docker-backed buildx builder '\(name)'")
+                case .alreadyExists(let name):
+                    self.lastError = nil
+                    self.logStore.append(source: .buildx, level: .info, "Docker-backed buildx builder '\(name)' already exists (set as default)")
+                case .dockerNotFound:
+                    self.lastError = "docker not found. Install Docker CLI, or copy the command and run it in a shell."
+                    self.logStore.append(source: .buildx, level: .error, self.lastError ?? "")
+                case .failed(let stderr, let code):
+                    self.lastError = "docker buildx create failed (exit \(code)):\n\(stderr)"
+                    self.logStore.append(source: .buildx, level: .error, self.lastError ?? "")
+                case .useFailed(let stderr, let code):
+                    self.lastError = "docker buildx use failed (exit \(code)):\n\(stderr)"
+                    self.logStore.append(source: .buildx, level: .error, self.lastError ?? "")
+                }
+            }
+            self.refreshBuildxStatus()
+        }
     }
 
     func copyBuildxCreateCommand() {
