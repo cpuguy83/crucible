@@ -832,12 +832,13 @@ final class TrayViewModel: ObservableObject {
         guard canRemoveBuilder(id: id) else { return }
         guard confirm(
             title: "Remove builder?",
-            message: "This removes the builder configuration. Local state files are left in place.",
+            message: "This removes the builder configuration and deletes its local state, including cached build data and build history.",
             confirmTitle: "Remove"
         ) else { return }
         let removingSelected = id == appSettings.selectedBuilderID
         let next = appSettings.removingBuilder(id: id)
         saveAndApplyAppSettings(next, recreateRuntime: removingSelected)
+        removeLocalStateForRemovedBuilder(id: id)
     }
 
     private func canRemoveBuilder(id: String) -> Bool {
@@ -857,6 +858,36 @@ final class TrayViewModel: ObservableObject {
         } catch {
             lastError = buildKitUserMessage(for: error)
         }
+    }
+
+    private func removeLocalStateForRemovedBuilder(id: String) {
+        let paths = BuilderStoragePaths(builderID: id)
+        do {
+            if id == BuilderConfig.defaultBuildKitID {
+                for url in defaultBuilderStateURLs(paths: paths) {
+                    try? FileManager.default.removeItem(at: url)
+                }
+            } else if FileManager.default.fileExists(atPath: paths.root.path) {
+                try FileManager.default.removeItem(at: paths.root)
+            }
+            logStore.append(source: .supervisor, level: .info, "Removed local state for builder '\(id)'")
+        } catch {
+            lastError = "Removed builder configuration, but failed to delete local state: \(error.localizedDescription)"
+            logStore.append(source: .supervisor, level: .error, lastError ?? "")
+        }
+        refreshStorageUsage()
+    }
+
+    private func defaultBuilderStateURLs(paths: BuilderStoragePaths) -> [URL] {
+        [
+            paths.buildKitSocketURL,
+            paths.buildKitStateImageURL,
+            paths.root.appendingPathComponent("buildkit-state.version"),
+            paths.buildKitDaemonConfigURL,
+            paths.root.appendingPathComponent("cli-state", isDirectory: true),
+            paths.root.appendingPathComponent("containers", isDirectory: true)
+                .appendingPathComponent("crucible-buildkitd", isDirectory: true),
+        ]
     }
 
     private func selectBuilder(id: String) {
@@ -1581,12 +1612,12 @@ final class TrayViewModel: ObservableObject {
     }
 
     private static func makeRuntime(appSettings: AppSettings) -> SelectedBuilderRuntime {
-        SelectedBuilderRuntime(appSettings: appSettings) { settings in
+        SelectedBuilderRuntime(appSettings: appSettings) { settings, paths in
             switch settings.backend {
             case .containerization:
-                return ContainerizationBackend(settings: settings)
+                return ContainerizationBackend(settings: settings, appRoot: paths.root)
             case .containerCLI:
-                return ContainerCLIBackend(settings: settings)
+                return ContainerCLIBackend(settings: settings, appRoot: paths.root)
             }
         }
     }

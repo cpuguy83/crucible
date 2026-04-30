@@ -4,7 +4,7 @@ import BuildKitContainerization
 import BuildKitContainerCLI
 
 struct SelectedBuilderRuntime {
-    typealias BackendFactory = BuildKitSupervisor.BackendFactory
+    typealias BackendFactory = @Sendable (BuildKitSettings, BuilderStoragePaths) throws -> any BuildKitBackend
 
     private enum Implementation {
         case buildKit(BuildKitSupervisor)
@@ -16,7 +16,10 @@ struct SelectedBuilderRuntime {
     init(appSettings: AppSettings, backendFactory: @escaping BackendFactory) {
         switch appSettings.selectedBuilder.kind {
         case .buildKit(let settings):
-            self.implementation = .buildKit(BuildKitSupervisor(settings: settings, factory: backendFactory))
+            let paths = BuilderStoragePaths(builderID: appSettings.selectedBuilder.id)
+            self.implementation = .buildKit(BuildKitSupervisor(settings: settings) { settings in
+                try backendFactory(settings, paths)
+            })
         case .docker(let settings):
             self.implementation = .docker(DockerContainerizationBackend(
                 settings: settings,

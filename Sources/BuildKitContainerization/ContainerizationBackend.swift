@@ -48,9 +48,9 @@ public actor ContainerizationBackend: BuildKitBackend {
     private let logContinuation: AsyncStream<String>.Continuation
     public nonisolated let logStream: AsyncStream<String>
 
-    public init(settings: BuildKitSettings) {
+    public init(settings: BuildKitSettings, appRoot: URL = BuilderStoragePaths().root) {
         self.settings = settings
-        self.appRoot = BuilderStoragePaths().root
+        self.appRoot = appRoot
         (stateStream, stateContinuation) = AsyncStream<BuildKitState>.makeStream()
         (progressStream, progressContinuation) = AsyncStream<BuildKitProgress>.makeStream()
         (logStream, logContinuation) = AsyncStream<String>.makeStream()
