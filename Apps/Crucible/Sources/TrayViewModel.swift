@@ -36,6 +36,7 @@ final class TrayViewModel: ObservableObject {
     private var subscriberTask: Task<Void, Never>?
     private var activeBuildRefreshTask: Task<Void, Never>?
     private var subscribedToBackend = false
+    private var runtimeGeneration = 0
     private var logWindowController: LogWindowController?
     private var buildLogWindowController: LogWindowController?
     private var buildLogTask: Task<Void, Never>?
@@ -397,23 +398,15 @@ final class TrayViewModel: ObservableObject {
                 let defaultAppSettings = AppSettings()
                 let defaults = defaultAppSettings.selectedBuildKitSettings
                 let shouldRestart = self.isRunning
-                self.runtime = Self.makeRuntime(appSettings: defaultAppSettings)
+                try await self.stopRuntimeForReplacement()
                 try AppSettingsStore.delete()
                 try? LoginItemManager.setEnabled(false)
                 self.appSettings = defaultAppSettings
                 self.appliedSettings = defaults
                 self.settingsDraft = defaults
                 self.dockerSettingsDraft = defaultAppSettings.selectedDockerSettings
+                self.runtime = Self.makeRuntime(appSettings: defaultAppSettings)
                 self.launchAtLoginEnabled = LoginItemManager.isEnabled
-                self.subscribedToBackend = false
-                self.subscriberTask?.cancel()
-                self.activeBuildRefreshTask?.cancel()
-                self.activeBuildRefreshTask = nil
-                self.subscriberTask = nil
-                self.activeBuilds = []
-                self.activeBuildsStatus = .notChecked
-                self.recentBuilds = []
-                self.recentBuildsStatus = .notChecked
                 self.state = await runtime.currentState()
                 self.dockerEndpoint = await runtime.currentDockerEndpoint()
                 self.lastError = nil
@@ -436,7 +429,7 @@ final class TrayViewModel: ObservableObject {
 
         Task {
             do {
-                try await self.runtime.stop()
+                try await self.stopRuntimeForReplacement()
                 let settings = self.appliedSettings
                 let appSettings = self.appSettings.replacingSelectedBuildKitSettings(settings)
                 self.appSettings = appSettings
@@ -461,7 +454,7 @@ final class TrayViewModel: ObservableObject {
 
         Task {
             do {
-                try await self.runtime.stop()
+                try await self.stopRuntimeForReplacement()
                 try? LoginItemManager.setEnabled(false)
                 try AppSettingsStore.delete()
                 let root = StorageUsage.appSupportDirectory()
@@ -492,6 +485,7 @@ final class TrayViewModel: ObservableObject {
     }
 
     private func finishReset(settings: BuildKitSettings, message: String) {
+        runtimeGeneration += 1
         appliedSettings = settings
         settingsDraft = settings
         subscribedToBackend = false
@@ -782,17 +776,9 @@ final class TrayViewModel: ObservableObject {
                     shouldAutoStart = newDockerSettings.autoStart
                     noticeSubject = "Docker"
                 }
+                try await self.stopRuntimeForReplacement(requireStopSuccess: shouldRestart)
                 try AppSettingsStore.save(appSettings)
                 self.applyAppSettings(appSettings)
-                self.subscribedToBackend = false
-                self.subscriberTask?.cancel()
-                self.activeBuildRefreshTask?.cancel()
-                self.activeBuildRefreshTask = nil
-                self.subscriberTask = nil
-                self.activeBuilds = []
-                self.activeBuildsStatus = .notChecked
-                self.recentBuilds = []
-                self.recentBuildsStatus = .notChecked
                 self.state = await runtime.currentState()
                 self.dockerEndpoint = await runtime.currentDockerEndpoint()
                 let notice = shouldRestart ? "Applied settings; restarting \(noticeSubject)" : "Applied settings"
@@ -812,20 +798,20 @@ final class TrayViewModel: ObservableObject {
     func addDockerBuilder() {
         guard canAddBuilder, !hasDockerBuilder else { return }
         let next = appSettings.upsertingBuilder(.docker(id: "docker", name: "Docker"), select: canSwitchBuilders)
-        saveAndApplyAppSettings(next)
+        saveAndApplyAppSettings(next, recreateRuntime: next.selectedBuilderID != appSettings.selectedBuilderID)
     }
 
     func addBuildKitBuilder() {
         guard canAddBuilder, !hasAdditionalBuildKitBuilder else { return }
         let settings = BuildKitSettings(hostSocketPath: BuilderStoragePaths(builderID: "buildkit").buildKitSocketURL.path)
         let next = appSettings.upsertingBuilder(.buildKit(id: "buildkit", name: "BuildKit", settings: settings), select: canSwitchBuilders)
-        saveAndApplyAppSettings(next)
+        saveAndApplyAppSettings(next, recreateRuntime: next.selectedBuilderID != appSettings.selectedBuilderID)
     }
 
     func renameBuilder(id: String, name: String) {
         let next = appSettings.renamingBuilder(id: id, name: name)
         guard next != appSettings else { return }
-        saveAndApplyAppSettings(next, recreateRuntime: id == appSettings.selectedBuilderID)
+        saveAndApplyAppSettings(next, recreateRuntime: false)
     }
 
     func removeBuilder(id: String) {
@@ -837,8 +823,9 @@ final class TrayViewModel: ObservableObject {
         ) else { return }
         let removingSelected = id == appSettings.selectedBuilderID
         let next = appSettings.removingBuilder(id: id)
-        saveAndApplyAppSettings(next, recreateRuntime: removingSelected)
-        removeLocalStateForRemovedBuilder(id: id)
+        saveAndApplyAppSettings(next, recreateRuntime: removingSelected) {
+            self.removeLocalStateForRemovedBuilder(id: id)
+        }
     }
 
     private func canRemoveBuilder(id: String) -> Bool {
@@ -847,16 +834,25 @@ final class TrayViewModel: ObservableObject {
         return true
     }
 
-    private func saveAndApplyAppSettings(_ settings: AppSettings, recreateRuntime: Bool = true) {
-        if recreateRuntime {
-            applyAppSettings(settings)
-        } else {
-            appSettings = settings
-        }
-        do {
-            try AppSettingsStore.save(settings)
-        } catch {
-            lastError = buildKitUserMessage(for: error)
+    private func saveAndApplyAppSettings(
+        _ settings: AppSettings,
+        recreateRuntime: Bool = true,
+        afterSave: (() -> Void)? = nil
+    ) {
+        Task {
+            do {
+                if recreateRuntime {
+                    try await self.stopRuntimeForReplacement(requireStopSuccess: self.isRunning)
+                    try AppSettingsStore.save(settings)
+                    self.applyAppSettings(settings)
+                } else {
+                    try AppSettingsStore.save(settings)
+                    self.appSettings = settings
+                }
+                afterSave?()
+            } catch {
+                self.lastError = buildKitUserMessage(for: error)
+            }
         }
     }
 
@@ -893,15 +889,45 @@ final class TrayViewModel: ObservableObject {
     private func selectBuilder(id: String) {
         guard canSwitchBuilders, id != appSettings.selectedBuilderID else { return }
         let next = appSettings.selectingBuilder(id: id)
-        do {
-            try AppSettingsStore.save(next)
-            applyAppSettings(next)
-        } catch {
-            lastError = buildKitUserMessage(for: error)
+        Task {
+            do {
+                try await self.stopRuntimeForReplacement()
+                try AppSettingsStore.save(next)
+                self.applyAppSettings(next)
+                self.state = await self.runtime.currentState()
+                self.dockerEndpoint = await self.runtime.currentDockerEndpoint()
+                if self.runtime.isRunning(self.state) {
+                    await self.subscribeBackendStreamsIfNeeded()
+                    self.refreshActiveBuilds()
+                }
+            } catch {
+                self.lastError = buildKitUserMessage(for: error)
+            }
         }
     }
 
+    private func stopRuntimeForReplacement(requireStopSuccess: Bool = true) async throws {
+        do {
+            try await runtime.stop()
+        } catch {
+            if requireStopSuccess { throw error }
+            let msg = buildKitUserMessage(for: error)
+            logStore.append(source: .supervisor, level: .warning, "runtime replacement stop skipped: \(msg)")
+        }
+        runtimeGeneration += 1
+        subscribedToBackend = false
+        subscriberTask?.cancel()
+        activeBuildRefreshTask?.cancel()
+        activeBuildRefreshTask = nil
+        subscriberTask = nil
+        activeBuilds = []
+        activeBuildsStatus = .notChecked
+        recentBuilds = []
+        recentBuildsStatus = .notChecked
+    }
+
     private func applyAppSettings(_ settings: AppSettings) {
+        runtimeGeneration += 1
         appSettings = settings
         appliedSettings = settings.selectedBuildKitSettings
         settingsDraft = appliedSettings
@@ -1033,6 +1059,7 @@ final class TrayViewModel: ObservableObject {
     }
 
     private func subscribeBuildHistory(logSubscription: Bool) {
+        let generation = runtimeGeneration
         activeBuildsStatus = .checking
         recentBuildsStatus = .checking
         activeBuildRefreshTask = Task { [weak self] in
@@ -1040,8 +1067,10 @@ final class TrayViewModel: ObservableObject {
             while !Task.isCancelled {
                 do {
                     guard let self else { return }
+                    guard await self.runtimeGeneration == generation else { return }
                     guard let socketPath = await self.runtime.currentBuildHistorySocketPath() else {
                         await MainActor.run {
+                            guard self.runtimeGeneration == generation else { return }
                             self.activeBuilds = []
                             self.activeBuildsStatus = .stopped
                             self.recentBuilds = []
@@ -1051,6 +1080,7 @@ final class TrayViewModel: ObservableObject {
                     }
                     try await BuildHistoryClient(socketPath: socketPath, transportMode: await self.runtime.buildHistoryTransportMode).watchBuildHistory { snapshot in
                         await MainActor.run {
+                            guard self.runtimeGeneration == generation else { return }
                             self.activeBuilds = snapshot.active
                             self.recentBuilds = snapshot.recent
                             self.activeBuildsStatus = .ready(snapshot.active.count)
@@ -1064,6 +1094,7 @@ final class TrayViewModel: ObservableObject {
                     if isTransientActiveBuildError(error) {
                         await MainActor.run {
                             guard let self else { return }
+                            guard self.runtimeGeneration == generation else { return }
                             self.activeBuildsStatus = .reconnecting(msg)
                             self.recentBuildsStatus = .reconnecting(msg)
                         }
@@ -1074,6 +1105,7 @@ final class TrayViewModel: ObservableObject {
 
                     await MainActor.run {
                         guard let self else { return }
+                        guard self.runtimeGeneration == generation else { return }
                         self.activeBuilds = []
                         self.recentBuilds = []
                         self.activeBuildsStatus = .unavailable(msg)
@@ -1506,14 +1538,16 @@ final class TrayViewModel: ObservableObject {
             return
         }
         subscribedToBackend = true
+        let generation = runtimeGeneration
 
         subscriberTask = Task { [weak self] in
             await withTaskGroup(of: Void.self) { group in
-                group.addTask { await self?.consumeState(streams.state) }
-                group.addTask { await self?.consumeProgress(streams.progress) }
-                group.addTask { await self?.consumeLogs(streams.logs) }
+                group.addTask { await self?.consumeState(streams.state, generation: generation) }
+                group.addTask { await self?.consumeProgress(streams.progress, generation: generation) }
+                group.addTask { await self?.consumeLogs(streams.logs, generation: generation) }
             }
             await MainActor.run {
+                guard self?.runtimeGeneration == generation else { return }
                 self?.subscribedToBackend = false
                 self?.activeBuildRefreshTask?.cancel()
                 self?.activeBuildRefreshTask = nil
@@ -1521,9 +1555,10 @@ final class TrayViewModel: ObservableObject {
         }
     }
 
-    private func consumeState(_ stream: AsyncStream<BuildKitState>) async {
+    private func consumeState(_ stream: AsyncStream<BuildKitState>, generation: Int) async {
         for await s in stream {
             await MainActor.run {
+                guard self.runtimeGeneration == generation else { return }
                 self.state = s
                 if self.runtime.supportsBuildKitOperations {
                     self.dockerEndpoint = nil
@@ -1541,6 +1576,7 @@ final class TrayViewModel: ObservableObject {
             activeBuildRefreshTask = nil
             activeBuilds = []
             activeBuildsStatus = .stopped
+            recentBuilds = []
             recentBuildsStatus = .stopped
             return
         }
@@ -1549,9 +1585,10 @@ final class TrayViewModel: ObservableObject {
         subscribeBuildHistory(logSubscription: false)
     }
 
-    private func consumeProgress(_ stream: AsyncStream<BuildKitProgress>) async {
+    private func consumeProgress(_ stream: AsyncStream<BuildKitProgress>, generation: Int) async {
         for await p in stream {
             await MainActor.run {
+                guard self.runtimeGeneration == generation else { return }
                 self.progressMessage = p.message
                 self.logStore.append(source: .progress, p.message)
                 Self.log.notice("progress[\(p.phase.rawValue, privacy: .public)]: \(p.message, privacy: .public)")
@@ -1559,9 +1596,10 @@ final class TrayViewModel: ObservableObject {
         }
     }
 
-    private func consumeLogs(_ stream: AsyncStream<String>) async {
+    private func consumeLogs(_ stream: AsyncStream<String>, generation: Int) async {
         for await line in stream {
             await MainActor.run {
+                guard self.runtimeGeneration == generation else { return }
                 self.logTail.append(line)
                 if self.logTail.count > 500 {
                     self.logTail.removeFirst(self.logTail.count - 500)
