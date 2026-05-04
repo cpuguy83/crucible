@@ -1,5 +1,6 @@
 import SwiftUI
 import BuildKitCore
+import BuildKitContainerization
 import AppKit
 
 struct SettingsWindowView: View {
@@ -27,6 +28,8 @@ struct SettingsWindowView: View {
         .onChange(of: selection) { _, section in
             if section == .integrations, viewModel.buildxStatus == .unknown {
                 viewModel.refreshBuildxStatus()
+            } else if section == .diagnostics, viewModel.imageAuthDiagnostics.isEmpty {
+                viewModel.refreshImageAuthDiagnostics()
             }
         }
     }
@@ -697,6 +700,24 @@ struct SettingsWindowView: View {
                 metricRow("Last Error", viewModel.lastError ?? "none")
             }
 
+            card("Image Authentication") {
+                Text("Crucible reuses Docker credentials for the images it needs to boot the selected builder. Secrets are never shown here.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                Button("Refresh Auth Diagnostics", action: viewModel.refreshImageAuthDiagnostics)
+                if viewModel.imageAuthDiagnostics.isEmpty {
+                    Text("Auth diagnostics have not been checked yet.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                } else {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(viewModel.imageAuthDiagnostics) { diagnostic in
+                            authDiagnosticRow(diagnostic)
+                        }
+                    }
+                }
+            }
+
             card("Effective Daemon Config") {
                 Text(viewModel.daemonConfigDescription)
                     .font(.callout)
@@ -794,6 +815,41 @@ struct SettingsWindowView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .font(.callout)
+    }
+
+    private func authDiagnosticRow(_ diagnostic: ImageAuthDiagnostic) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: symbol(for: diagnostic.status))
+                .foregroundStyle(color(for: diagnostic.status))
+                .frame(width: 18)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(diagnostic.role.rawValue)
+                        .font(.callout.weight(.medium))
+                    Text(diagnostic.status.rawValue)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(color(for: diagnostic.status))
+                }
+                Text(diagnostic.reference)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                Text("Registry: \(diagnostic.registryHost)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                if let source = diagnostic.source {
+                    Text("Source: \(source)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+                Text(diagnostic.detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+        }
     }
 
     private func settingLabel(_ title: String, _ detail: String) -> some View {
@@ -1204,6 +1260,22 @@ struct SettingsWindowView: View {
         case .ok: .green
         case .warning: .orange
         case .failed: .red
+        }
+    }
+
+    private func color(for status: ImageAuthDiagnostic.Status) -> Color {
+        switch status {
+        case .available, .notRequired: .green
+        case .missing: .orange
+        case .failed: .red
+        }
+    }
+
+    private func symbol(for status: ImageAuthDiagnostic.Status) -> String {
+        switch status {
+        case .available, .notRequired: "checkmark.circle.fill"
+        case .missing: "exclamationmark.triangle.fill"
+        case .failed: "xmark.circle.fill"
         }
     }
 

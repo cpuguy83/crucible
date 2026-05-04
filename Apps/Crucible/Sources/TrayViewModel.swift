@@ -24,6 +24,7 @@ final class TrayViewModel: ObservableObject {
     @Published var settingsDraft: BuildKitSettings
     @Published var dockerSettingsDraft: DockerSettings
     @Published private(set) var prerequisiteChecks: [PrerequisiteCheck] = []
+    @Published private(set) var imageAuthDiagnostics: [ImageAuthDiagnostic] = []
     @Published private(set) var activeBuilds: [ActiveBuild] = []
     @Published private(set) var activeBuildsStatus: ActiveBuildStatus = .notChecked
     @Published private(set) var recentBuilds: [RecentBuild] = []
@@ -155,6 +156,13 @@ final class TrayViewModel: ObservableObject {
         switch appSettings.selectedBuilder.kind {
         case .buildKit(let settings): return settings.imageReference
         case .docker(let settings): return settings.imageReference
+        }
+    }
+
+    var selectedBuilderInitfsReference: String {
+        switch appSettings.selectedBuilder.kind {
+        case .buildKit(let settings): return settings.initfsReference
+        case .docker(let settings): return settings.initfsReference
         }
     }
 
@@ -611,6 +619,9 @@ final class TrayViewModel: ObservableObject {
         Recent builds: \(recentBuildsStatusText)
         Builder: \(selectedBuilderName) (\(selectedBuilderKindText))
         Image: \(selectedBuilderAppliedImageReference)
+        Initfs: \(selectedBuilderInitfsReference)
+        Auth diagnostics:
+        \(imageAuthDiagnosticsSummary)
         \(selectedBuilderIsBuildKit ? "Rosetta: enabled automatically when available" : "")
         Effective daemon config path: \(daemonConfigPath)
         Last error: \(lastError ?? "none")
@@ -1026,6 +1037,7 @@ final class TrayViewModel: ObservableObject {
         recentBuilds = []
         recentBuildsStatus = .notChecked
         buildxStatus = .unknown
+        imageAuthDiagnostics = []
     }
 
     func revertSettingsDraft() {
@@ -1113,6 +1125,29 @@ final class TrayViewModel: ObservableObject {
                 self.logStore.append(source: .supervisor, level: .info, "Prerequisite check complete")
             }
         }
+    }
+
+    func refreshImageAuthDiagnostics() {
+        let initfsReference = selectedBuilderInitfsReference
+        let imageReference = selectedBuilderAppliedImageReference
+        Task {
+            let diagnostics = await ImageAuthDiagnostics.diagnostics(
+                initfsReference: initfsReference,
+                imageReference: imageReference
+            )
+            await MainActor.run {
+                self.imageAuthDiagnostics = diagnostics
+                self.logStore.append(source: .supervisor, level: .info, "Image auth diagnostics refreshed")
+            }
+        }
+    }
+
+    private var imageAuthDiagnosticsSummary: String {
+        guard !imageAuthDiagnostics.isEmpty else { return "not checked" }
+        return imageAuthDiagnostics.map { diagnostic in
+            let source = diagnostic.source.map { " via \($0)" } ?? ""
+            return "- \(diagnostic.role.rawValue): \(diagnostic.status.rawValue) for \(diagnostic.registryHost)\(source)"
+        }.joined(separator: "\n")
     }
 
     private func appendKernelOverrideValidationMessages(for path: String?, to messages: inout [String]) {

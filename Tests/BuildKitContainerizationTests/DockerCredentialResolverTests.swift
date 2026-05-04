@@ -170,6 +170,31 @@ struct DockerCredentialResolverTests {
         #expect(error.description.contains("docker login ghcr.io"))
     }
 
+    @Test func imageAuthDiagnosticSummarizesLookupWithoutSecrets() async throws {
+        let dir = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let config = dir.appendingPathComponent("config.json")
+        try writeJSON(
+            """
+            {"auths":{"ghcr.io":{"username":"octo","password":"super-secret"}}}
+            """,
+            to: config
+        )
+        let resolver = DockerCredentialResolver(configURL: config, environment: ["PATH": dir.path])
+
+        let diagnostic = await ImageAuthDiagnostics.diagnostic(
+            role: .daemon,
+            reference: "ghcr.io/example/private:latest",
+            resolver: resolver
+        )
+
+        #expect(diagnostic.status == .available)
+        #expect(diagnostic.registryHost == "ghcr.io")
+        #expect(diagnostic.source == "Docker config auths")
+        #expect(!diagnostic.detail.contains("super-secret"))
+        #expect(!diagnostic.detail.contains("octo"))
+    }
+
     private func temporaryDirectory() throws -> URL {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("crucible-docker-auth-\(UUID().uuidString)", isDirectory: true)

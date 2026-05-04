@@ -254,6 +254,79 @@ struct DockerCredentialResolver: Sendable {
     }
 }
 
+public struct ImageAuthDiagnostic: Identifiable, Sendable, Equatable {
+    public enum Role: String, Sendable, Equatable {
+        case initfs = "Init filesystem"
+        case daemon = "Daemon image"
+    }
+
+    public enum Status: String, Sendable, Equatable {
+        case available = "Credentials available"
+        case missing = "No credentials found"
+        case notRequired = "No registry credentials required"
+        case failed = "Credential lookup failed"
+    }
+
+    public var id: String { "\(role.rawValue):\(reference)" }
+    public var role: Role
+    public var reference: String
+    public var registryHost: String
+    public var status: Status
+    public var source: String?
+    public var detail: String
+
+    public init(role: Role, reference: String, registryHost: String, status: Status, source: String?, detail: String) {
+        self.role = role
+        self.reference = reference
+        self.registryHost = registryHost
+        self.status = status
+        self.source = source
+        self.detail = detail
+    }
+}
+
+public enum ImageAuthDiagnostics {
+    public static func diagnostics(initfsReference: String, imageReference: String) async -> [ImageAuthDiagnostic] {
+        let resolver = DockerCredentialResolver()
+        async let initfs = diagnostic(role: .initfs, reference: initfsReference, resolver: resolver)
+        async let daemon = diagnostic(role: .daemon, reference: imageReference, resolver: resolver)
+        return await [initfs, daemon]
+    }
+
+    static func diagnostic(
+        role: ImageAuthDiagnostic.Role,
+        reference: String,
+        resolver: DockerCredentialResolver
+    ) async -> ImageAuthDiagnostic {
+        let lookup = await resolver.lookup(forReference: reference)
+        let registryHost = lookup.resolvedRegistryHost ?? lookup.registryHost ?? "none"
+        let status: ImageAuthDiagnostic.Status
+        let source: String?
+        switch lookup.status {
+        case .found(_, let credentialSource):
+            status = .available
+            source = credentialSource.description
+        case .notFound:
+            status = .missing
+            source = nil
+        case .notRequired:
+            status = .notRequired
+            source = nil
+        case .failed:
+            status = .failed
+            source = nil
+        }
+        return ImageAuthDiagnostic(
+            role: role,
+            reference: reference,
+            registryHost: registryHost,
+            status: status,
+            source: source,
+            detail: lookup.actionableMessage
+        )
+    }
+}
+
 extension DockerCredentialResolver {
     static let tokenUsername = "<token>"
     static let credentialsNotFoundMessage = "credentials not found in native keychain"
