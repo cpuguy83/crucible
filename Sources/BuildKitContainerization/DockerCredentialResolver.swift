@@ -17,16 +17,43 @@ struct DockerCredentialResolver: Sendable {
     }
 
     func authentication(for reference: String) async throws -> Authentication? {
-        guard let credentials = try await credentials(forReference: reference) else { return nil }
-        return DockerCredentialAuthentication(credentials: credentials)
+        let lookup = await lookup(forReference: reference)
+        if case .failed = lookup.status {
+            throw Error.lookupFailed(lookup)
+        }
+        return lookup.authentication
+    }
+
+    func lookup(forReference reference: String) async -> DockerCredentialLookup {
+        let host: String?
+        do {
+            host = try registryHost(forReference: reference)
+        } catch {
+            return .init(reference: reference, registryHost: nil, resolvedRegistryHost: nil, status: .failed(.invalidReference(String(describing: error))))
+        }
+        guard let host else {
+            return .init(reference: reference, registryHost: nil, resolvedRegistryHost: nil, status: .notRequired)
+        }
+        return await lookup(forRegistryHost: host, reference: reference)
     }
 
     func credentials(forReference reference: String) async throws -> DockerRegistryCredentials? {
-        guard let host = try registryHost(forReference: reference) else { return nil }
-        return try await credentials(forRegistryHost: host)
+        let lookup = await lookup(forReference: reference)
+        if case .failed = lookup.status {
+            throw Error.lookupFailed(lookup)
+        }
+        return lookup.credentials
     }
 
     func credentials(forRegistryHost host: String) async throws -> DockerRegistryCredentials? {
+        let lookup = await lookup(forRegistryHost: host, reference: nil)
+        if case .failed = lookup.status {
+            throw Error.lookupFailed(lookup)
+        }
+        return lookup.credentials
+    }
+
+    func lookup(forRegistryHost host: String, reference: String? = nil) async -> DockerCredentialLookup {
         let resolvedHost = Self.resolveRegistryHost(host)
         let config: DockerConfig?
         do {
@@ -36,25 +63,82 @@ struct DockerCredentialResolver: Sendable {
         } catch let error as POSIXError where error.code == .ENOENT {
             config = nil
         } catch {
-            throw Error.loadConfig(String(describing: error))
+            return .init(reference: reference, registryHost: host, resolvedRegistryHost: resolvedHost, status: .failed(.configLoadFailed(String(describing: error))))
         }
 
         if let config {
             if let helper = config.credentialHelpers?[resolvedHost] {
-                return try await credentialsFromHelper(helper, host: resolvedHost)
+                return await lookupFromHelper(helper, host: resolvedHost, registryHost: host, reference: reference, source: .credentialHelper(helper))
             }
 
-            if let store = config.credentialsStore, !store.isEmpty,
-               let credentials = try await credentialsFromHelper(store, host: resolvedHost) {
-                return credentials
+            if let store = config.credentialsStore, !store.isEmpty {
+                let storeLookup = await lookupFromHelper(store, host: resolvedHost, registryHost: host, reference: reference, source: .credentialsStore(store))
+                switch storeLookup.status {
+                case .found, .failed:
+                    return storeLookup
+                case .notFound, .notRequired:
+                    break
+                }
             }
 
             if let auth = config.authConfigs?[resolvedHost] {
-                return try Self.credentials(from: auth)
+                do {
+                    if let credentials = try Self.credentials(from: auth) {
+                        return .init(reference: reference, registryHost: host, resolvedRegistryHost: resolvedHost, status: .found(credentials, .inlineAuth))
+                    }
+                } catch {
+                    return .init(reference: reference, registryHost: host, resolvedRegistryHost: resolvedHost, status: .failed(.invalidDockerAuth(String(describing: error))))
+                }
             }
         }
 
-        return try await credentialsFromHelper("", host: resolvedHost)
+        guard let defaultHelper = Self.defaultCredentialHelper() else {
+            return .init(reference: reference, registryHost: host, resolvedRegistryHost: resolvedHost, status: .notFound(nil))
+        }
+        return await lookupFromHelper(defaultHelper, host: resolvedHost, registryHost: host, reference: reference, source: .defaultCredentialHelper(defaultHelper))
+    }
+
+    func lookupFromHelper(
+        _ helper: String,
+        host: String,
+        registryHost: String,
+        reference: String?,
+        source: DockerCredentialSource
+    ) async -> DockerCredentialLookup {
+        let executableName = "docker-credential-\(helper)"
+        guard let executable = findExecutable(named: executableName) else {
+            return .init(reference: reference, registryHost: registryHost, resolvedRegistryHost: host, status: .notFound(.helperNotFound(executableName)))
+        }
+
+        do {
+            let output = try await runHelper(executable: executable, host: host)
+            if output.exitCode != 0 {
+                let stdout = output.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+                let stderr = output.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+                if stdout == Self.credentialsNotFoundMessage {
+                    return .init(reference: reference, registryHost: registryHost, resolvedRegistryHost: host, status: .notFound(.credentialsNotFound))
+                }
+                if stdout == Self.credentialsMissingServerURLMessage {
+                    return .init(reference: reference, registryHost: registryHost, resolvedRegistryHost: host, status: .failed(.credentialsMissingServerURL))
+                }
+                return .init(reference: reference, registryHost: registryHost, resolvedRegistryHost: host, status: .failed(.helperFailed(helper: executableName, stdout: stdout, stderr: stderr, exitCode: output.exitCode)))
+            }
+
+            let response = try JSONDecoder().decode(CredentialHelperResponse.self, from: Data(output.stdout.utf8))
+            guard !response.username.isEmpty || !response.secret.isEmpty else {
+                return .init(reference: reference, registryHost: registryHost, resolvedRegistryHost: host, status: .notFound(.credentialsNotFound))
+            }
+            let credentials = DockerRegistryCredentials(
+                username: response.username == Self.tokenUsername ? "" : response.username,
+                secret: response.secret,
+                isIdentityToken: response.username == Self.tokenUsername
+            )
+            return .init(reference: reference, registryHost: registryHost, resolvedRegistryHost: host, status: .found(credentials, source))
+        } catch let error as Error {
+            return .init(reference: reference, registryHost: registryHost, resolvedRegistryHost: host, status: .failed(.helperTimedOut(String(describing: error))))
+        } catch {
+            return .init(reference: reference, registryHost: registryHost, resolvedRegistryHost: host, status: .failed(.helperFailed(helper: executableName, stdout: "", stderr: String(describing: error), exitCode: -1)))
+        }
     }
 
     func registryHost(forReference reference: String) throws -> String? {
@@ -223,6 +307,7 @@ extension DockerCredentialResolver {
         case credentialsMissingServerURL
         case helperFailed(helper: String, stdout: String, stderr: String, exitCode: Int32)
         case helperTimedOut(String)
+        case lookupFailed(DockerCredentialLookup)
 
         var description: String {
             switch self {
@@ -238,6 +323,8 @@ extension DockerCredentialResolver {
                 return "execute \(helper) failed with exit code \(exitCode), stdout: \(stdout), stderr: \(stderr)"
             case .helperTimedOut(let helper):
                 return "execute \(helper) timed out"
+            case .lookupFailed(let lookup):
+                return lookup.actionableMessage
             }
         }
     }
@@ -273,6 +360,96 @@ struct DockerRegistryCredentials: Equatable, Sendable {
     var username: String
     var secret: String
     var isIdentityToken: Bool
+}
+
+struct DockerCredentialLookup: Equatable, Sendable, CustomStringConvertible {
+    var reference: String?
+    var registryHost: String?
+    var resolvedRegistryHost: String?
+    var status: DockerCredentialLookupStatus
+
+    var credentials: DockerRegistryCredentials? {
+        if case .found(let credentials, _) = status { return credentials }
+        return nil
+    }
+
+    var authentication: Authentication? {
+        guard let credentials else { return nil }
+        return DockerCredentialAuthentication(credentials: credentials)
+    }
+
+    var actionableMessage: String {
+        let host = resolvedRegistryHost ?? registryHost ?? "the registry"
+        switch status {
+        case .found(_, let source):
+            return "Using Docker credentials for \(host) from \(source.description)."
+        case .notRequired:
+            return "No registry credentials are required for \(reference ?? "this image")."
+        case .notFound(let reason):
+            if case .helperNotFound(let helper)? = reason {
+                return "No Docker credentials found for \(host). Install \(helper) or run docker login \(host) and try again."
+            }
+            return "No Docker credentials found for \(host). Run docker login \(host) and try again."
+        case .failed(let reason):
+            return "Could not read Docker credentials for \(host): \(reason.description). Run docker login \(host) and try again."
+        }
+    }
+
+    var description: String { actionableMessage }
+}
+
+enum DockerCredentialLookupStatus: Equatable, Sendable {
+    case found(DockerRegistryCredentials, DockerCredentialSource)
+    case notFound(DockerCredentialNotFoundReason?)
+    case notRequired
+    case failed(DockerCredentialFailure)
+}
+
+enum DockerCredentialSource: Equatable, Sendable, CustomStringConvertible {
+    case credentialHelper(String)
+    case credentialsStore(String)
+    case defaultCredentialHelper(String)
+    case inlineAuth
+
+    var description: String {
+        switch self {
+        case .credentialHelper(let helper): return "credHelpers entry docker-credential-\(helper)"
+        case .credentialsStore(let store): return "credsStore docker-credential-\(store)"
+        case .defaultCredentialHelper(let helper): return "default helper docker-credential-\(helper)"
+        case .inlineAuth: return "Docker config auths"
+        }
+    }
+}
+
+enum DockerCredentialNotFoundReason: Equatable, Sendable {
+    case helperNotFound(String)
+    case credentialsNotFound
+}
+
+enum DockerCredentialFailure: Equatable, Sendable, CustomStringConvertible {
+    case invalidReference(String)
+    case configLoadFailed(String)
+    case invalidDockerAuth(String)
+    case credentialsMissingServerURL
+    case helperFailed(helper: String, stdout: String, stderr: String, exitCode: Int32)
+    case helperTimedOut(String)
+
+    var description: String {
+        switch self {
+        case .invalidReference(let message):
+            return "invalid image reference (\(message))"
+        case .configLoadFailed(let message):
+            return "load Docker config: \(message)"
+        case .invalidDockerAuth(let message):
+            return "invalid Docker auth entry (\(message))"
+        case .credentialsMissingServerURL:
+            return DockerCredentialResolver.credentialsMissingServerURLMessage
+        case .helperFailed(let helper, let stdout, let stderr, let exitCode):
+            return "execute \(helper) failed with exit code \(exitCode), stdout: \(stdout), stderr: \(stderr)"
+        case .helperTimedOut(let helper):
+            return "execute \(helper) timed out"
+        }
+    }
 }
 
 struct DockerCredentialAuthentication: Authentication {

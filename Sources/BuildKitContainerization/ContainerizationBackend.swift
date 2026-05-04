@@ -96,8 +96,7 @@ public actor ContainerizationBackend: BuildKitBackend {
             let imageReference = settings.imageReference
             progressContinuation.yield(.init(phase: .prefetchingImage, message: "Prefetching buildkitd image"))
             let imagePrefetchTask = Task {
-                let auth = try? await ImagePullAuthenticator.authentication(for: imageReference)
-                return await ImagePrefetcher.prefetch(reference: imageReference, imageStore: imageStore, auth: auth)
+                await ImagePullAuthenticator.prefetch(reference: imageReference, imageStore: imageStore)
             }
             prefetchTask = imagePrefetchTask
 

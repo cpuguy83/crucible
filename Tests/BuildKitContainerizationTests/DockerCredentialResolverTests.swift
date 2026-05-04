@@ -50,6 +50,25 @@ struct DockerCredentialResolverTests {
         #expect(credentials == DockerRegistryCredentials(username: "octo", secret: "secret", isIdentityToken: false))
     }
 
+    @Test func lookupReportsInlineAuthSource() async throws {
+        let dir = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let config = dir.appendingPathComponent("config.json")
+        try writeJSON(
+            """
+            {"auths":{"ghcr.io":{"username":"octo","password":"secret"}}}
+            """,
+            to: config
+        )
+        let resolver = DockerCredentialResolver(configURL: config, environment: ["PATH": dir.path])
+
+        let lookup = await resolver.lookup(forRegistryHost: "ghcr.io")
+        #expect(lookup.status == .found(
+            DockerRegistryCredentials(username: "octo", secret: "secret", isIdentityToken: false),
+            .inlineAuth
+        ))
+    }
+
     @Test func credentialHelperOverridesInlineAuth() async throws {
         let dir = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -95,11 +114,60 @@ struct DockerCredentialResolverTests {
         #expect(credentials == nil)
     }
 
+    @Test func lookupReportsMissingHelper() async throws {
+        let dir = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let config = dir.appendingPathComponent("config.json")
+        try writeJSON(
+            """
+            {"credHelpers":{"ghcr.io":"definitely-missing-helper"}}
+            """,
+            to: config
+        )
+        let resolver = DockerCredentialResolver(configURL: config, environment: ["PATH": dir.path])
+
+        let lookup = await resolver.lookup(forRegistryHost: "ghcr.io")
+        #expect(lookup.status == .notFound(.helperNotFound("docker-credential-definitely-missing-helper")))
+        #expect(lookup.actionableMessage.contains("docker login ghcr.io"))
+    }
+
+    @Test func lookupReportsInvalidConfig() async throws {
+        let dir = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let config = dir.appendingPathComponent("config.json")
+        try writeJSON("not-json", to: config)
+        let resolver = DockerCredentialResolver(configURL: config, environment: ["PATH": dir.path])
+
+        let lookup = await resolver.lookup(forRegistryHost: "ghcr.io")
+        if case .failed(let reason) = lookup.status {
+            #expect(reason.description.contains("load Docker config"))
+        } else {
+            Issue.record("expected failed lookup")
+        }
+    }
+
     @Test func registryHostForReferenceUsesContainerizationNormalization() throws {
         let resolver = DockerCredentialResolver(environment: [:])
         #expect(try resolver.registryHost(forReference: "docker.io/library/alpine:latest") == "registry-1.docker.io")
         #expect(try resolver.registryHost(forReference: "ghcr.io/example/image:latest") == "ghcr.io")
         #expect(try resolver.registryHost(forReference: "alpine:latest") == nil)
+    }
+
+    @Test func imagePullAuthFailureSuggestsDockerLogin() {
+        let lookup = DockerCredentialLookup(
+            reference: "ghcr.io/example/private:latest",
+            registryHost: "ghcr.io",
+            resolvedRegistryHost: "ghcr.io",
+            status: .notFound(.credentialsNotFound)
+        )
+        let error = ImagePullError.pullFailed(
+            reference: "ghcr.io/example/private:latest",
+            lookup: lookup,
+            underlying: "HTTP request failed with response: 401 Unauthorized"
+        )
+
+        #expect(error.description.contains("Authentication required for ghcr.io"))
+        #expect(error.description.contains("docker login ghcr.io"))
     }
 
     private func temporaryDirectory() throws -> URL {
