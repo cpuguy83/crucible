@@ -1,83 +1,153 @@
 # Crucible
 
-A macOS menubar app that runs and supervises a [BuildKit](https://github.com/moby/buildkit)
-daemon on top of Apple's [Containerization](https://github.com/apple/containerization)
-framework, and exposes it to host build clients (`docker buildx`, `buildctl`) over a
-local unix socket.
+Crucible is a macOS menu bar app for managing a BuildKit builder running in an
+Apple Containerization VM.
+
+It helps you:
+
+- Run and supervise BuildKit from the macOS menu bar.
+- Connect `docker buildx`, `buildctl`, and other build tools to that builder.
+- Use a dockerd-backed builder when you want to run the images you build.
+
+Crucible is intended for people who want native macOS controls around builder
+lifecycle, logs, storage, and integration with existing build tools.
 
 > Status: **early / experimental**. Apple silicon + macOS 26 only.
 
-## Why
+## Screenshots
 
-`apple/containerization` gives macOS a first-class way to run Linux containers in
-lightweight VMs. BuildKit is the de-facto OCI image builder. Crucible glues the
-two together with a tray UI so you can run `docker buildx build` against a
-buildkitd that lives in an Apple-managed Linux VM.
+Crucible keeps builder controls, integrations, diagnostics, and logs in a native
+macOS settings window.
 
-## Architecture (v1)
+| General | Builders |
+| --- | --- |
+| ![General settings for the selected builder](docs/screenshots/general.png) | ![Builder selection and management](docs/screenshots/builders.png) |
 
-- **BuildKitCore** — backend-agnostic supervisor + state machine.
-- **BuildKitContainerization** — default backend, links `apple/containerization`
-  as a SwiftPM dependency.
-- **BuildKitContainerCLI** — opt-in backend that shells out to the
-  [`apple/container`](https://github.com/apple/container) CLI for users who
-  prefer that path.
-- **Crucible.app** — SwiftUI `MenuBarExtra` tray UI.
+| Integrations | Builds |
+| --- | --- |
+| ![Docker and buildx integration status](docs/screenshots/integrations.png) | ![Active and recent builder activity](docs/screenshots/builds.png) |
 
-BuildKit runs as a single long-lived container using the upstream
-`moby/buildkit:buildx-stable-1` image (user-overridable). The kernel comes from
-the same Kata static release path used by Apple Containerization's default
-kernel flow, pinned by URL and SHA256. Rosetta is enabled automatically when
-available, binfmt_misc is registered in the VM, and BuildKit advertises both
-`linux/arm64` and `linux/amd64` unless the user overrides worker platforms in
-`buildkitd.toml`.
+| Storage | Reset |
+| --- | --- |
+| ![Builder storage usage and cache controls](docs/screenshots/storage.png) | ![Reset options for configuration and local state](docs/screenshots/reset.png) |
 
-## Features
+| Diagnostics | VM Resources |
+| --- | --- |
+| ![Builder diagnostics and effective daemon configuration](docs/screenshots/diagnostics.png) | ![CPU, memory, and kernel settings for the builder VM](docs/screenshots/vm-resources.png) |
 
-- Menubar lifecycle controls: start, stop, restart, logs, settings.
-- Direct Apple Containerization backend by default.
-- Optional Apple `container` CLI backend for comparison/debugging.
-- Host unix socket exposure for `buildctl` and `docker buildx`.
-- Persistent BuildKit state on an ext4 disk image.
-- Custom BuildKit image reference and custom `buildkitd.toml`.
-- Buildx registration/recreation/removal helpers.
-- Storage inspection, prune/reset controls, and factory reset.
-- Native logs window with search/filter/follow/export/copy.
-- Diagnostics pane with prerequisites, effective daemon config, and copyable
-  summary.
+| Build Logs | App Logs |
+| --- | --- |
+| ![Build log viewer](docs/screenshots/build-logs.png) | ![Crucible app log viewer](docs/screenshots/app-logs.png) |
 
-## Repository layout
+## What It Does
 
+- Starts, stops, and restarts the selected BuildKit builder from the menu bar.
+- Runs the builder in a lightweight Linux VM through Apple's Containerization
+  framework.
+- Exposes local sockets for host tools like `docker`, `docker buildx`, and
+  `buildctl`.
+- Supports multiple saved builders while keeping only one selected builder
+  running at a time.
+- Shows logs, current state, active builds, and recent build history.
+- Provides storage usage, cache pruning, reset controls, and diagnostics.
+- Can create and remove CLI integrations for the selected builder.
+
+## Builders
+
+### BuildKit
+
+The BuildKit builder runs upstream `moby/buildkit:buildx-stable-1` by default.
+It exposes a local BuildKit socket and works well with `docker buildx` or
+`buildctl`.
+
+The app can register a buildx builder for you from **Settings > Integrations**.
+
+Manual `buildctl` usage looks like:
+
+```bash
+BUILDKIT_HOST="unix://$HOME/Library/Application Support/Crucible/buildkitd.sock" buildctl debug workers
 ```
-Package.swift               # library targets (testable, headless)
-Sources/
-  BuildKitCore/             # supervisor, state, settings, protocols
-  BuildKitContainerization/ # framework-backed implementation
-  BuildKitContainerCLI/     # `container` CLI-backed implementation
-Apps/Crucible/              # macOS .app target (Xcode-managed)
-Tests/                      # unit tests
-docs/                       # design notes
-```
+
+### Dockerd-Based Builder
+
+For workflows where you want to build an image and then run the result,
+Crucible can run a managed Docker daemon in a Linux VM using the
+Containerization framework. This exposes a Docker socket for the host Docker CLI
+and Docker buildx.
+
+The app can create either a Docker context or a Docker buildx builder from
+**Settings > Integrations**. These integrations are mutually exclusive for the
+selected dockerd-based builder, and the UI lets you switch between them.
 
 ## Requirements
 
-- Apple silicon Mac
-- macOS 26 (Tahoe)
-- Xcode 26 / Swift 6.x
+- Apple silicon Mac.
+- macOS 26 Tahoe.
+- Xcode 26 / Swift 6.x if building from source.
+- Docker CLI if you want Docker context/buildx integration helpers.
+- `buildctl` if you want to use BuildKit directly from the terminal.
 
-## Building
+## Install From Source
 
 ```bash
-make build      # swift build for libraries
-make test       # unit tests
+make app
+make run
+```
+
+Useful development commands:
+
+```bash
+make build      # build Swift package libraries
+make test       # run unit tests
 make app        # build Crucible.app via xcodebuild
-make run        # build and launch the app
+make run        # build and launch Crucible.app
 make dist       # build build/dist/Crucible.zip
 ```
 
-The Xcode project is generated from `project.yml` via [XcodeGen](https://github.com/yonaskolb/XcodeGen)
-(`brew install xcodegen`). Both `project.yml` and the generated `Crucible.xcodeproj`
-are committed; regenerate with `make project`.
+The Xcode project is generated from `project.yml` with
+[XcodeGen](https://github.com/yonaskolb/XcodeGen). Both `project.yml` and the
+generated `Crucible.xcodeproj` are committed. Regenerate with:
+
+```bash
+make project
+```
+
+## Typical Workflow
+
+1. Launch Crucible.
+2. Open **Settings > Builders** and choose or create a builder.
+3. Start the selected builder from the menu bar.
+4. Open **Settings > Integrations** and create the matching Docker/buildx
+   integration if you want CLI convenience.
+5. Build from your terminal with `docker buildx build`, `docker build`, or
+   `buildctl`, depending on the selected builder and integration.
+
+## Storage And Reset
+
+Crucible stores settings and builder state under:
+
+```text
+~/Library/Application Support/Crucible
+```
+
+The default BuildKit builder keeps legacy state directly in that directory.
+Additional builders use builder-specific directories under `builders/<id>/`.
+
+Removing a builder from the app also removes that builder's local state, cache,
+and build history.
+
+## Repository Layout
+
+```text
+Package.swift               # Swift package libraries and test targets
+Sources/
+  BuildKitCore/             # settings, storage paths, supervisor, protocols
+  BuildKitContainerization/ # Apple Containerization-backed runtimes
+  BuildKitContainerCLI/     # optional Apple container CLI BuildKit backend
+Apps/Crucible/              # macOS app target
+Tests/                      # unit tests
+docs/                       # roadmap, screenshots, design notes
+```
 
 ## Smoke Tests
 
@@ -90,16 +160,14 @@ codesign --force --sign - --entitlements Apps/Crucible/Resources/Crucible.entitl
 .build/debug/crucibled --smoke
 ```
 
-The optional CLI backend can be smoked independently. It uses an isolated temp
-socket and app root, starts `container system`, and passes Crucible's managed
-kernel with `--kernel`:
+The optional BuildKit CLI backend can be smoked independently:
 
 ```bash
 swift build --product crucibled
 .build/debug/crucibled --backend cli --smoke
 ```
 
-To verify a running app daemon from the host:
+To verify a running BuildKit builder from the host:
 
 ```bash
 BUILDKIT_HOST="unix://$HOME/Library/Application Support/Crucible/buildkitd.sock" buildctl debug workers
@@ -117,8 +185,7 @@ Local zip builds do not require signing credentials:
 make dist
 ```
 
-Developer ID release/notarization targets are scaffolded and use environment
-variables:
+Developer ID release/notarization targets use environment variables:
 
 ```bash
 DEVELOPER_ID_APPLICATION="Developer ID Application: Example (TEAMID)" make release-zip

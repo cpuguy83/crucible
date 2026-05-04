@@ -11,66 +11,51 @@ struct SettingsWindowView: View {
     private let hostLimits = HostResourceLimits.current()
 
     var body: some View {
-        HStack(spacing: 0) {
+        NavigationSplitView {
             sidebar
-            Divider()
+        } detail: {
             VStack(spacing: 0) {
                 detail
                 applyFooter
             }
+            .background(Color(nsColor: .windowBackgroundColor))
         }
         .frame(minWidth: 860, minHeight: 560)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .toolbar(removing: .sidebarToggle)
+        .toolbarVisibility(.hidden, for: .windowToolbar)
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+        .onChange(of: selection) { _, section in
+            if section == .integrations, viewModel.buildxStatus == .unknown {
+                viewModel.refreshBuildxStatus()
+            }
+        }
     }
 
     private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        List(selection: $selection) {
+            Section {
+                statusSidebarHeader
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 8, leading: 10, bottom: 10, trailing: 10))
+            }
+            ForEach(SettingsSection.allCases) { section in
+                Label(section.title, systemImage: section.symbol)
+                    .tag(section)
+            }
+        }
+        .listStyle(.sidebar)
+        .navigationSplitViewColumnWidth(min: 220, ideal: 240, max: 280)
+    }
+
+    private var statusSidebarHeader: some View {
+        VStack(alignment: .leading, spacing: 4) {
             Text("Crucible")
                 .font(.title2.weight(.semibold))
-                .padding(.horizontal, 14)
-                .padding(.top, 18)
-
             Text(viewModel.statusText)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
-                .padding(.horizontal, 14)
-                .padding(.bottom, 8)
-
-            ForEach(SettingsSection.allCases) { section in
-                sidebarRow(section)
-            }
-
-            Spacer()
         }
-        .frame(width: 210)
-        .padding(.vertical, 8)
-        .background(Color(nsColor: .controlBackgroundColor))
-    }
-
-    private func sidebarRow(_ section: SettingsSection) -> some View {
-        Button {
-            selection = section
-            if section == .integrations, viewModel.buildxStatus == .unknown {
-                viewModel.refreshBuildxStatus()
-            }
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: section.symbol)
-                    .frame(width: 18)
-                Text(section.title)
-                Spacer()
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .contentShape(Rectangle())
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(selection == section ? Color.accentColor.opacity(0.18) : .clear)
-            )
-        }
-        .buttonStyle(.plain)
-        .padding(.horizontal, 8)
     }
 
     @ViewBuilder
@@ -98,6 +83,7 @@ struct SettingsWindowView: View {
             .padding(28)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     private var header: some View {
@@ -437,14 +423,16 @@ struct SettingsWindowView: View {
 
                 Button("Discard Changes", action: viewModel.revertSettingsDraft)
                     .disabled(!viewModel.settingsDirty)
+                    .buttonStyle(.glass)
                 Button("Apply Changes", action: viewModel.saveSettings)
                     .keyboardShortcut("s", modifiers: [.command])
                     .disabled(!viewModel.canSaveSettings)
+                    .buttonStyle(.glassProminent)
             }
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
-        .background(.regularMaterial)
+        .background(Color(nsColor: .windowBackgroundColor))
         .overlay(alignment: .top) {
             Divider()
         }
