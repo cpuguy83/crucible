@@ -9,8 +9,9 @@ import SystemPackage
 /// Default backend that drives buildkitd via apple/containerization directly.
 ///
 /// Lifecycle:
-///   1. Resolve a Linux kernel via ``KernelLocator``.
-///   2. Construct an `ImageStore` rooted at our app-support directory.
+///   1. Construct an `ImageStore` rooted at our app-support directory.
+///   2. Resolve a Linux kernel via ``KernelLocator`` while prefetching the
+///      buildkitd image into that image store.
 ///   3. Build a `ContainerManager` with the user's chosen initfs reference.
 ///   4. `manager.create(...)` pulls the buildkitd image (if needed) and
 ///      unpacks it into an ext4 rootfs block, cached by container id.
@@ -73,6 +74,7 @@ public actor ContainerizationBackend: BuildKitBackend {
         }
         transition(to: .starting)
 
+        var prefetchTask: Task<String?, Never>?
         do {
             try await ensureAppRoot()
             try acquireLifecycleLock()
@@ -84,6 +86,19 @@ public actor ContainerizationBackend: BuildKitBackend {
             // not worth preserving across crashes — image content store
             // and kernel cache live elsewhere — so blow it away.
             try removeStaleContainerDirIfPresent()
+
+            // Local OCI content + image stores rooted under app support. Build
+            // the store before kernel lookup so image prefetch can overlap with
+            // any first-run kernel download/extract work.
+            progressContinuation.yield(.init(phase: .pullingImage, message: "Preparing image store"))
+            let contentStore = try LocalContentStore(path: appRoot.appendingPathComponent("content"))
+            let imageStore = try ImageStore(path: appRoot, contentStore: contentStore)
+            let imageReference = settings.imageReference
+            progressContinuation.yield(.init(phase: .prefetchingImage, message: "Prefetching buildkitd image"))
+            let imagePrefetchTask = Task {
+                await ImagePrefetcher.prefetch(reference: imageReference, imageStore: imageStore)
+            }
+            prefetchTask = imagePrefetchTask
 
             // Locate kernel: override -> local cache -> apple/container CLI
             // install -> Kata download. Last path requires network on first
@@ -126,11 +141,6 @@ public actor ContainerizationBackend: BuildKitBackend {
 
             let kernel = Kernel(path: kernelURL, platform: .linuxArm)
 
-            // Local OCI content + image stores rooted under app support.
-            progressContinuation.yield(.init(phase: .pullingImage, message: "Preparing image store"))
-            let contentStore = try LocalContentStore(path: appRoot.appendingPathComponent("content"))
-            let imageStore = try ImageStore(path: appRoot, contentStore: contentStore)
-
             // Build the container manager. This pulls the initfs image if
             // not already cached. We pass a VmnetNetwork so the framework
             // can give buildkitd's container an outbound interface (needed
@@ -148,6 +158,11 @@ public actor ContainerizationBackend: BuildKitBackend {
             // Pull / unpack the buildkitd image into a per-container ext4
             // rootfs. Cached by container id; reused across restarts.
             progressContinuation.yield(.init(phase: .preparingRootfs, message: "Preparing buildkitd rootfs"))
+            if let prefetchError = await imagePrefetchTask.value {
+                logContinuation.yield("[buildkitd] image prefetch failed; container creation will retry: \(prefetchError)")
+            } else {
+                progressContinuation.yield(.init(phase: .prefetchingImage, message: "Buildkitd image ready"))
+            }
             let stdoutWriter = LineWriter(prefix: "[buildkitd]", continuation: logContinuation)
             let stderrWriter = LineWriter(prefix: "[buildkitd!]", continuation: logContinuation)
 
@@ -248,6 +263,7 @@ public actor ContainerizationBackend: BuildKitBackend {
             let endpoint = BuildKitEndpoint(socketPath: settings.hostSocketPath)
             transition(to: .running(endpoint: endpoint))
         } catch {
+            prefetchTask?.cancel()
             await teardown()
             let msg = String(describing: error)
             transition(to: .error(msg))

@@ -101,6 +101,7 @@ struct SettingsWindowView: View {
                 metricRow("Builder", viewModel.selectedBuilderName)
                 metricRow("Status", viewModel.statusText)
                 metricRow(viewModel.endpointLabel, viewModel.displayedSocketPath ?? "Not available")
+                startupProgressView
                 HStack {
                     Button("Start", action: viewModel.startFromMenu)
                         .disabled(!viewModel.canStart)
@@ -125,6 +126,33 @@ struct SettingsWindowView: View {
                 resourceSettingsCard
                 kernelSettingsCard
             }
+        }
+    }
+
+    @ViewBuilder
+    private var startupProgressView: some View {
+        if let title = viewModel.startupProgressTitle {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text(title)
+                        .font(.callout.weight(.medium))
+                }
+                if let message = viewModel.startupProgressMessage {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+                if let fraction = viewModel.startupProgressFraction {
+                    ProgressView(value: fraction)
+                } else {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+            }
+            .padding(.top, 2)
         }
     }
 

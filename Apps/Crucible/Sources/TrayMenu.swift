@@ -9,7 +9,9 @@ struct TrayMenu: View {
         Text("Builder: \(viewModel.selectedBuilderName)")
         Text(viewModel.selectedBuilderKindText)
             .foregroundStyle(.secondary)
-        Text(viewModel.statusText)
+        Text(viewModel.menuStatusText)
+        Text(viewModel.menuSubstatusText)
+            .foregroundStyle(.secondary)
         Text(viewModel.activeBuildsMenuText)
             .foregroundStyle(.secondary)
 

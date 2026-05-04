@@ -38,6 +38,7 @@ public struct BuildKitProgress: Sendable, Equatable {
     public enum Phase: String, Sendable {
         case downloadingKernel
         case pullingImage
+        case prefetchingImage
         case preparingRootfs
         case bootingVM
         case startingDaemon

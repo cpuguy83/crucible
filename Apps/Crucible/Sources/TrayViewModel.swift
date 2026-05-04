@@ -11,6 +11,8 @@ final class TrayViewModel: ObservableObject {
     @Published private(set) var state: BuildKitState = .stopped
     @Published private(set) var lastError: String?
     @Published private(set) var progressMessage: String?
+    @Published private(set) var progressPhase: BuildKitProgress.Phase?
+    @Published private(set) var progressFraction: Double?
     @Published private(set) var logTail: [String] = []
     @Published private(set) var buildxStatus: BuildxIntegration.BuilderStatus = .unknown
     @Published private(set) var dockerContextStatus: BuildxIntegration.ContextStatus = .unknown
@@ -302,6 +304,74 @@ final class TrayViewModel: ObservableObject {
         case .stopping: return "Stopping…"
         case .error(let msg): return "Error: \(msg)"
         }
+    }
+
+    var menuStatusText: String {
+        switch state {
+        case .stopped: return "Stopped"
+        case .starting: return "Starting"
+        case .running: return "Running"
+        case .degraded: return "Degraded"
+        case .stopping: return "Stopping"
+        case .error: return "Error"
+        }
+    }
+
+    var menuSubstatusText: String {
+        switch state {
+        case .stopped:
+            return "Idle"
+        case .starting:
+            switch progressPhase {
+            case .downloadingKernel, .pullingImage, .prefetchingImage, .preparingRootfs, nil:
+                return "Downloading dependencies"
+            case .bootingVM, .startingDaemon, .healthCheck:
+                return "Starting services"
+            case .shuttingDown:
+                return "Stopping services"
+            }
+        case .running:
+            return "Ready for builds"
+        case .degraded:
+            return "Check logs"
+        case .stopping:
+            return "Stopping services"
+        case .error:
+            return "Check error details"
+        }
+    }
+
+    var startupProgressTitle: String? {
+        guard case .starting = state else { return nil }
+        guard let progressPhase else { return "Initializing builder" }
+        switch progressPhase {
+        case .downloadingKernel:
+            return "Preparing Linux kernel"
+        case .pullingImage:
+            return "Preparing image store"
+        case .prefetchingImage:
+            return "Fetching daemon image"
+        case .preparingRootfs:
+            return "Preparing root filesystem"
+        case .bootingVM:
+            return "Booting VM"
+        case .startingDaemon:
+            return "Starting daemon"
+        case .healthCheck:
+            return "Waiting for daemon"
+        case .shuttingDown:
+            return "Stopping builder"
+        }
+    }
+
+    var startupProgressMessage: String? {
+        guard case .starting = state else { return nil }
+        return progressMessage
+    }
+
+    var startupProgressFraction: Double? {
+        guard case .starting = state else { return nil }
+        return progressFraction
     }
 
     /// SF Symbol name reflecting current state.
@@ -1571,6 +1641,11 @@ final class TrayViewModel: ObservableObject {
             await MainActor.run {
                 guard self.runtimeGeneration == generation else { return }
                 self.state = s
+                if case .starting = s {} else {
+                    self.progressMessage = nil
+                    self.progressPhase = nil
+                    self.progressFraction = nil
+                }
                 if self.runtime.supportsBuildKitOperations {
                     self.dockerEndpoint = nil
                 }
@@ -1601,6 +1676,8 @@ final class TrayViewModel: ObservableObject {
             await MainActor.run {
                 guard self.runtimeGeneration == generation else { return }
                 self.progressMessage = p.message
+                self.progressPhase = p.phase
+                self.progressFraction = p.fraction
                 self.logStore.append(source: .progress, p.message)
                 Self.log.notice("progress[\(p.phase.rawValue, privacy: .public)]: \(p.message, privacy: .public)")
             }

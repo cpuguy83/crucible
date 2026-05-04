@@ -48,6 +48,7 @@ public actor DockerContainerizationBackend {
         }
         transition(to: .starting)
 
+        var prefetchTask: Task<String?, Never>?
         do {
             let validationIssues = BuilderConfigValidator.validate(settings)
             guard validationIssues.isEmpty else {
@@ -57,6 +58,16 @@ public actor DockerContainerizationBackend {
             try await ensureAppRoot()
             try acquireLifecycleLock()
             try removeStaleContainerDirIfPresent()
+
+            progressContinuation.yield(.init(phase: .pullingImage, message: "Preparing image store"))
+            let contentStore = try LocalContentStore(path: paths.appSupportRoot.appendingPathComponent("content"))
+            let imageStore = try ImageStore(path: paths.appSupportRoot, contentStore: contentStore)
+            let imageReference = settings.imageReference
+            progressContinuation.yield(.init(phase: .prefetchingImage, message: "Prefetching Docker image"))
+            let imagePrefetchTask = Task {
+                await ImagePrefetcher.prefetch(reference: imageReference, imageStore: imageStore)
+            }
+            prefetchTask = imagePrefetchTask
 
             progressContinuation.yield(.init(phase: .downloadingKernel, message: "Locating kernel"))
             let progressSink = self.progressContinuation
@@ -93,10 +104,6 @@ public actor DockerContainerizationBackend {
 
             let kernel = Kernel(path: kernelURL, platform: .linuxArm)
 
-            progressContinuation.yield(.init(phase: .pullingImage, message: "Preparing image store"))
-            let contentStore = try LocalContentStore(path: paths.appSupportRoot.appendingPathComponent("content"))
-            let imageStore = try ImageStore(path: paths.appSupportRoot, contentStore: contentStore)
-
             progressContinuation.yield(.init(phase: .pullingImage, message: "Pulling init filesystem"))
             var manager = try await ContainerManager(
                 kernel: kernel,
@@ -107,6 +114,11 @@ public actor DockerContainerizationBackend {
             )
 
             progressContinuation.yield(.init(phase: .preparingRootfs, message: "Preparing Docker rootfs"))
+            if let prefetchError = await imagePrefetchTask.value {
+                logContinuation.yield("[dockerd] image prefetch failed; container creation will retry: \(prefetchError)")
+            } else {
+                progressContinuation.yield(.init(phase: .prefetchingImage, message: "Docker image ready"))
+            }
             let stdoutWriter = LineWriter(prefix: "[dockerd]", continuation: logContinuation)
             let stderrWriter = LineWriter(prefix: "[dockerd!]", continuation: logContinuation)
 
@@ -184,6 +196,7 @@ public actor DockerContainerizationBackend {
 
             transition(to: .running(endpoint: DockerDaemonEndpoint(socketPath: paths.dockerSocketURL.path)))
         } catch {
+            prefetchTask?.cancel()
             await teardown()
             let msg = String(describing: error)
             transition(to: .error(msg))
