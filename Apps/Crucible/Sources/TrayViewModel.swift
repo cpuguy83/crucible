@@ -245,7 +245,9 @@ final class TrayViewModel: ObservableObject {
         set { selectBuilder(id: newValue) }
     }
 
-    var canSwitchBuilders: Bool { !isRunning && !settingsApplyBlocked }
+    var canSelectBuilder: Bool { !settingsApplyBlocked }
+
+    var canSwitchBuilders: Bool { canSelectBuilder && !runtime.isRunning(state) }
 
     var canAddBuilder: Bool { !settingsApplyBlocked && (!hasDockerBuilder || !hasAdditionalBuildKitBuilder) }
 
@@ -887,7 +889,16 @@ final class TrayViewModel: ObservableObject {
     }
 
     private func selectBuilder(id: String) {
-        guard canSwitchBuilders, id != appSettings.selectedBuilderID else { return }
+        guard canSelectBuilder, id != appSettings.selectedBuilderID else { return }
+        let currentBuilderName = appSettings.selectedBuilder.name
+        let nextBuilderName = appSettings.builders.first { $0.id == id }?.name ?? "the selected builder"
+        if runtime.isRunning(state) {
+            guard confirm(
+                title: "Switch builders?",
+                message: "Crucible needs to stop \(currentBuilderName) before switching to \(nextBuilderName).",
+                confirmTitle: "Stop and Switch"
+            ) else { return }
+        }
         let next = appSettings.selectingBuilder(id: id)
         Task {
             do {

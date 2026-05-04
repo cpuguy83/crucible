@@ -136,9 +136,9 @@ struct SettingsWindowView: View {
                         Text("\(builder.name) (\(builder.kindText))").tag(builder.id)
                     }
                 }
-                .disabled(!viewModel.canSwitchBuilders)
+                .disabled(!viewModel.canSelectBuilder)
                 metricRow("Buildx Name", viewModel.buildxBuilderName)
-                Text("Only one Crucible builder can run at a time. Stop the current builder before switching.")
+                Text("Only one Crucible builder can run at a time. If the current builder is running, Crucible will ask before stopping it and switching.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
