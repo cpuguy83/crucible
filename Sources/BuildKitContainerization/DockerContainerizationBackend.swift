@@ -65,7 +65,8 @@ public actor DockerContainerizationBackend {
             let imageReference = settings.imageReference
             progressContinuation.yield(.init(phase: .prefetchingImage, message: "Prefetching Docker image"))
             let imagePrefetchTask = Task {
-                await ImagePrefetcher.prefetch(reference: imageReference, imageStore: imageStore)
+                let auth = try? await ImagePullAuthenticator.authentication(for: imageReference)
+                return await ImagePrefetcher.prefetch(reference: imageReference, imageStore: imageStore, auth: auth)
             }
             prefetchTask = imagePrefetchTask
 
@@ -105,6 +106,7 @@ public actor DockerContainerizationBackend {
             let kernel = Kernel(path: kernelURL, platform: .linuxArm)
 
             progressContinuation.yield(.init(phase: .pullingImage, message: "Pulling init filesystem"))
+            try await ImagePullAuthenticator.pull(reference: settings.initfsReference, imageStore: imageStore)
             var manager = try await ContainerManager(
                 kernel: kernel,
                 initfsReference: settings.initfsReference,
@@ -233,7 +235,7 @@ public actor DockerContainerizationBackend {
         let imageStore = try ImageStore(path: paths.appSupportRoot, contentStore: contentStore)
         progressContinuation.yield(.init(phase: .pullingImage, message: "Pulling \(settings.imageReference)"))
         do {
-            _ = try await imageStore.pull(reference: settings.imageReference)
+            try await ImagePullAuthenticator.pull(reference: settings.imageReference, imageStore: imageStore)
         } catch {
             throw BuildKitBackendError.imagePullFailed(String(describing: error))
         }

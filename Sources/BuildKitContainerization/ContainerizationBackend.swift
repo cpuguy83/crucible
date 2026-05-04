@@ -96,7 +96,8 @@ public actor ContainerizationBackend: BuildKitBackend {
             let imageReference = settings.imageReference
             progressContinuation.yield(.init(phase: .prefetchingImage, message: "Prefetching buildkitd image"))
             let imagePrefetchTask = Task {
-                await ImagePrefetcher.prefetch(reference: imageReference, imageStore: imageStore)
+                let auth = try? await ImagePullAuthenticator.authentication(for: imageReference)
+                return await ImagePrefetcher.prefetch(reference: imageReference, imageStore: imageStore, auth: auth)
             }
             prefetchTask = imagePrefetchTask
 
@@ -147,6 +148,7 @@ public actor ContainerizationBackend: BuildKitBackend {
             // for image pulls during builds). Matches what the upstream
             // cctl example does.
             progressContinuation.yield(.init(phase: .pullingImage, message: "Pulling init filesystem"))
+            try await ImagePullAuthenticator.pull(reference: settings.initfsReference, imageStore: imageStore)
             var manager = try await ContainerManager(
                 kernel: kernel,
                 initfsReference: settings.initfsReference,
@@ -308,7 +310,7 @@ public actor ContainerizationBackend: BuildKitBackend {
         let imageStore = try ImageStore(path: appRoot, contentStore: contentStore)
         progressContinuation.yield(.init(phase: .pullingImage, message: "Pulling \(settings.imageReference)"))
         do {
-            _ = try await imageStore.pull(reference: settings.imageReference)
+            try await ImagePullAuthenticator.pull(reference: settings.imageReference, imageStore: imageStore)
         } catch {
             throw BuildKitBackendError.imagePullFailed(String(describing: error))
         }
