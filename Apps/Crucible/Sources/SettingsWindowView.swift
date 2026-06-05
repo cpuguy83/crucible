@@ -560,15 +560,15 @@ struct SettingsWindowView: View {
     private var buildKitBuildxIntegrationCard: some View {
         card("Docker Buildx") {
             metricRow("Status", viewModel.buildxStatus.displayText)
-            Text("Register the selected BuildKit builder as a remote docker buildx builder named `\(viewModel.buildxBuilderName)`, and optionally set it as the current builder.")
+            Text("Register the selected BuildKit builder as a remote docker buildx builder named `\(viewModel.buildxBuilderName)`, and optionally set it as the current builder. You can register it before the builder is running; it becomes reachable once the builder starts.")
                 .foregroundStyle(.secondary)
                 .font(.callout)
             HStack {
                 Button("Add and Use", action: viewModel.addToBuildx)
-                    .disabled(!viewModel.isRunning || !viewModel.supportsRawBuildKitEndpoint)
+                    .disabled(!viewModel.supportsRawBuildKitEndpoint)
                 Button("Refresh", action: viewModel.refreshBuildxStatus)
                 Button("Recreate", action: viewModel.recreateBuildxBuilder)
-                    .disabled(!viewModel.isRunning || !viewModel.supportsRawBuildKitEndpoint)
+                    .disabled(!viewModel.supportsRawBuildKitEndpoint)
                 Button("Remove", action: viewModel.removeBuildxBuilder)
                     .disabled(!viewModel.supportsRawBuildKitEndpoint)
             }
@@ -577,19 +577,19 @@ struct SettingsWindowView: View {
 
             HStack {
                 Button("Copy buildx create command", action: viewModel.copyBuildxCreateCommand)
-                    .disabled(viewModel.endpoint == nil || !viewModel.supportsRawBuildKitEndpoint)
+                    .disabled(!viewModel.supportsRawBuildKitEndpoint)
                 Button("Copy BUILDKIT_HOST env", action: viewModel.copyBuildKitHostEnv)
-                    .disabled(viewModel.endpoint == nil || !viewModel.supportsRawBuildKitEndpoint)
+                    .disabled(!viewModel.supportsRawBuildKitEndpoint)
             }
         }
     }
 
     private var dockerSocketIntegrationCard: some View {
         card("Docker CLI") {
-            metricRow("Socket", viewModel.displayedSocketPath ?? "Not available")
+            metricRow("Socket", viewModel.selectedBuilderSocketPath)
             metricRow("Context", viewModel.dockerContextName)
             metricRow("Status", viewModel.dockerContextStatus.displayText)
-            Text("Use the selected Docker builder by pointing Docker-compatible tools at Crucible's Docker socket while the builder is running, or create a Docker context for it.")
+            Text("Use the selected Docker builder by pointing Docker-compatible tools at Crucible's Docker socket, or create a Docker context for it. You can create the context before the builder is running; the socket becomes reachable once the builder starts.")
                 .foregroundStyle(.secondary)
                 .font(.callout)
             if let message = viewModel.dockerContextBlockedMessage {
@@ -600,16 +600,16 @@ struct SettingsWindowView: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Button(viewModel.dockerContextPrimaryActionTitle, action: viewModel.createDockerContext)
-                        .disabled(viewModel.dockerEndpoint == nil)
+                        .disabled(viewModel.dockerIntegrationSocketPath == nil)
                     Button("Remove Context", action: viewModel.removeDockerContext)
                         .disabled(viewModel.dockerContextStatus == .notRegistered || viewModel.dockerContextStatus == .dockerNotFound)
                     Button("Refresh", action: viewModel.refreshDockerIntegrationStatuses)
                 }
                 HStack {
                     Button("Copy DOCKER_HOST env", action: viewModel.copyDockerHostEnv)
-                        .disabled(viewModel.dockerEndpoint == nil)
+                        .disabled(viewModel.dockerIntegrationSocketPath == nil)
                     Button("Copy Docker context command", action: viewModel.copyDockerContextCreateCommand)
-                        .disabled(viewModel.dockerEndpoint == nil)
+                        .disabled(viewModel.dockerIntegrationSocketPath == nil)
                 }
             }
         }
@@ -619,7 +619,7 @@ struct SettingsWindowView: View {
         card("Docker Buildx") {
             metricRow("Builder", viewModel.dockerBuildxBuilderName)
             metricRow("Status", viewModel.dockerBuildxStatus.displayText)
-            Text("Create a remote buildx builder that targets the selected Docker builder's managed socket directly.")
+            Text("Create a remote buildx builder that targets the selected Docker builder's managed socket directly. You can register it before the builder is running; it becomes reachable once the builder starts.")
                 .foregroundStyle(.secondary)
                 .font(.callout)
             if let message = viewModel.dockerBuildxBlockedMessage {
@@ -629,16 +629,11 @@ struct SettingsWindowView: View {
             }
             VStack(alignment: .leading, spacing: 8) {
                 Button(viewModel.dockerBuildxPrimaryActionTitle, action: viewModel.createDockerBackedBuildxBuilder)
-                    .disabled(viewModel.dockerEndpoint == nil)
+                    .disabled(viewModel.dockerIntegrationSocketPath == nil)
                 Button("Remove Buildx Builder", action: viewModel.removeDockerBackedBuildxBuilder)
                     .disabled(viewModel.dockerBuildxStatus == .notRegistered || viewModel.dockerBuildxStatus == .dockerNotFound)
                 Button("Copy buildx create command", action: viewModel.copyDockerBuildxCreateCommand)
-                    .disabled(viewModel.dockerEndpoint == nil)
-            }
-            if viewModel.dockerEndpoint == nil {
-                Text("Start the Docker builder to expose its socket.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .disabled(viewModel.dockerIntegrationSocketPath == nil)
             }
         }
     }

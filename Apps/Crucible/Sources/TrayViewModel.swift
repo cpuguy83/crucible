@@ -402,6 +402,26 @@ final class TrayViewModel: ObservableObject {
         }
     }
 
+    /// Stable BuildKit endpoint derived from the configured host socket path.
+    ///
+    /// Unlike `endpoint`, this is available even when the builder is stopped so
+    /// host integrations (buildx, env vars, copyable commands) can be set up
+    /// ahead of time. The socket only becomes live once the builder starts, but
+    /// `docker buildx create --driver remote` merely records the path.
+    var buildKitIntegrationEndpoint: BuildKitEndpoint? {
+        guard runtime.supportsRawBuildKitEndpoint else { return nil }
+        return BuildKitEndpoint(socketPath: selectedBuilderSocketPath)
+    }
+
+    /// Stable Docker daemon socket path for the selected Docker builder.
+    ///
+    /// Available regardless of running state so Docker context / buildx
+    /// integrations can be registered while the builder is stopped.
+    var dockerIntegrationSocketPath: String? {
+        guard selectedBuilderIsDocker else { return nil }
+        return BuilderStoragePaths(builderID: appSettings.selectedBuilder.id).dockerSocketURL.path
+    }
+
     func start() async {
         await subscribeBackendStreamsIfNeeded()
         await run("start") { try await self.runtime.start() }
@@ -1357,39 +1377,38 @@ final class TrayViewModel: ObservableObject {
     }
 
     func copyBuildKitHostEnv() {
-        guard runtime.supportsRawBuildKitEndpoint else { return }
-        guard let ep = endpoint else { return }
+        guard let ep = buildKitIntegrationEndpoint else { return }
         copyToPasteboard(BuildxCommands.buildKitHostEnv(for: ep))
         logStore.append(source: .buildx, level: .info, "Copied BUILDKIT_HOST env")
     }
 
     func copyDockerHostEnv() {
-        guard let ep = dockerEndpoint else { return }
-        copyToPasteboard(BuildxCommands.dockerHostEnv(for: BuildKitEndpoint(socketPath: ep.socketPath)))
+        guard let socketPath = dockerIntegrationSocketPath else { return }
+        copyToPasteboard(BuildxCommands.dockerHostEnv(for: BuildKitEndpoint(socketPath: socketPath)))
         logStore.append(source: .buildx, level: .info, "Copied DOCKER_HOST env")
     }
 
     func copyDockerContextCreateCommand() {
-        guard let ep = dockerEndpoint else { return }
+        guard let socketPath = dockerIntegrationSocketPath else { return }
         copyToPasteboard(BuildxCommands.dockerContextCreateCommand(
-            for: BuildKitEndpoint(socketPath: ep.socketPath),
+            for: BuildKitEndpoint(socketPath: socketPath),
             contextName: dockerContextName
         ))
         logStore.append(source: .buildx, level: .info, "Copied docker context create command")
     }
 
     func copyDockerBuildxCreateCommand() {
-        guard let ep = dockerEndpoint else { return }
+        guard let socketPath = dockerIntegrationSocketPath else { return }
         copyToPasteboard(BuildxCommands.dockerBuildxCreateCommand(
-            for: BuildKitEndpoint(socketPath: ep.socketPath),
+            for: BuildKitEndpoint(socketPath: socketPath),
             builderName: dockerBuildxBuilderName
         ))
         logStore.append(source: .buildx, level: .info, "Copied Docker-backed buildx create command")
     }
 
     func createDockerContext() {
-        guard let ep = dockerEndpoint else { return }
-        let endpoint = BuildKitEndpoint(socketPath: ep.socketPath)
+        guard let socketPath = dockerIntegrationSocketPath else { return }
+        let endpoint = BuildKitEndpoint(socketPath: socketPath)
         let contextName = dockerContextName
         let builderName = dockerBuildxBuilderName
         Task { [buildx] in
@@ -1449,8 +1468,8 @@ final class TrayViewModel: ObservableObject {
     }
 
     func createDockerBackedBuildxBuilder() {
-        guard let ep = dockerEndpoint else { return }
-        let endpoint = BuildKitEndpoint(socketPath: ep.socketPath)
+        guard let socketPath = dockerIntegrationSocketPath else { return }
+        let endpoint = BuildKitEndpoint(socketPath: socketPath)
         let builderName = dockerBuildxBuilderName
         let contextName = dockerContextName
         Task { [buildx] in
@@ -1504,15 +1523,13 @@ final class TrayViewModel: ObservableObject {
     }
 
     func copyBuildxCreateCommand() {
-        guard runtime.supportsRawBuildKitEndpoint else { return }
-        guard let ep = endpoint else { return }
+        guard let ep = buildKitIntegrationEndpoint else { return }
         copyToPasteboard(BuildxCommands.dockerBuildxCreateCommand(for: ep, builderName: buildxBuilderNameForCommands))
         logStore.append(source: .buildx, level: .info, "Copied docker buildx create command")
     }
 
     func addToBuildx() {
-        guard runtime.supportsRawBuildKitEndpoint else { return }
-        guard let ep = endpoint else { return }
+        guard let ep = buildKitIntegrationEndpoint else { return }
         let builderName = buildxBuilderNameForCommands
         Task { [buildx] in
             let result = await buildx.install(endpoint: ep, builderName: builderName)
@@ -1578,8 +1595,7 @@ final class TrayViewModel: ObservableObject {
     }
 
     func recreateBuildxBuilder() {
-        guard runtime.supportsRawBuildKitEndpoint else { return }
-        guard let ep = endpoint else { return }
+        guard let ep = buildKitIntegrationEndpoint else { return }
         let builderName = buildxBuilderNameForCommands
         Task { [buildx] in
             let result = await buildx.recreate(endpoint: ep, builderName: builderName)
