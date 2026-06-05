@@ -818,11 +818,11 @@ final class TrayViewModel: ObservableObject {
         switch appSettings.selectedBuilder.kind {
         case .buildKit:
             var messages = BuildKitSettingsValidator.validate(settingsDraft).map(validationMessage(for:))
-            appendKernelOverrideValidationMessages(for: settingsDraft.kernelOverridePath, to: &messages)
+            appendKernelOverrideValidationMessages(for: settingsDraft.kernelSource, to: &messages)
             return messages
         case .docker:
             var messages = BuilderConfigValidator.validate(dockerSettingsDraft).map(validationMessage(for:))
-            appendKernelOverrideValidationMessages(for: dockerSettingsDraft.kernelOverridePath, to: &messages)
+            appendKernelOverrideValidationMessages(for: dockerSettingsDraft.kernelSource, to: &messages)
             return messages
         }
     }
@@ -1048,23 +1048,23 @@ final class TrayViewModel: ObservableObject {
     func chooseKernelOverride() {
         let panel = NSOpenPanel()
         panel.title = "Choose Linux Kernel"
-        panel.message = "Choose a vmlinux/Image file to boot the selected builder with. Leave unset to use Crucible's default kernel source."
+        panel.message = "Choose a vmlinuz/Image file to boot the selected builder with. Leave unset to use Crucible's default kernel source."
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
         panel.allowsMultipleSelection = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
         if selectedBuilderIsDocker {
-            dockerSettingsDraft.kernelOverridePath = url.path
+            dockerSettingsDraft.kernelSource = .overridePath(url.path)
         } else {
-            settingsDraft.kernelOverridePath = url.path
+            settingsDraft.kernelSource = .overridePath(url.path)
         }
     }
 
     func useDefaultKernel() {
         if selectedBuilderIsDocker {
-            dockerSettingsDraft.kernelOverridePath = nil
+            dockerSettingsDraft.kernelSource = .auto
         } else {
-            settingsDraft.kernelOverridePath = nil
+            settingsDraft.kernelSource = .auto
         }
     }
 
@@ -1100,12 +1100,26 @@ final class TrayViewModel: ObservableObject {
 
             do {
                 let kernelSettings = self.selectedBuilderIsBuildKit ? self.settingsDraft : self.dockerSettingsDraft.kernelSettings
-                let kernel = try KernelLocator.locate(settings: kernelSettings)
-                checks.append(PrerequisiteCheck(
-                    name: "Linux kernel",
-                    status: .ok,
-                    detail: kernel.path
-                ))
+                if case .registryImage(let reference, let subpath) = kernelSettings.kernelSource {
+                    let detail: String
+                    if let subpath, !subpath.isEmpty {
+                        detail = "Kernel \(subpath) is extracted from image \(reference) when the builder starts."
+                    } else {
+                        detail = "Kernel image \(reference) is pulled when the builder starts."
+                    }
+                    checks.append(PrerequisiteCheck(
+                        name: "Linux kernel",
+                        status: .ok,
+                        detail: detail
+                    ))
+                } else {
+                    let kernel = try KernelLocator.locate(settings: kernelSettings)
+                    checks.append(PrerequisiteCheck(
+                        name: "Linux kernel",
+                        status: .ok,
+                        detail: kernel.path
+                    ))
+                }
             } catch {
                 checks.append(PrerequisiteCheck(
                     name: "Linux kernel",
@@ -1150,8 +1164,8 @@ final class TrayViewModel: ObservableObject {
         }.joined(separator: "\n")
     }
 
-    private func appendKernelOverrideValidationMessages(for path: String?, to messages: inout [String]) {
-        guard let path, !path.isEmpty else { return }
+    private func appendKernelOverrideValidationMessages(for source: KernelSource, to messages: inout [String]) {
+        guard case .overridePath(let path) = source, !path.isEmpty else { return }
         var isDirectory: ObjCBool = false
         let exists = FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory)
         if !exists {
@@ -1272,6 +1286,14 @@ final class TrayViewModel: ObservableObject {
             return "BuildKit daemon config must be 256 KiB or smaller (currently \(bytes) bytes)."
         case .daemonConfigMalformed(let detail):
             return "BuildKit daemon config looks invalid: \(detail)."
+        case .kernelImageReferenceEmpty:
+            return "Kernel image reference is required."
+        case .kernelImageReferenceMalformed(let ref):
+            return "Kernel image reference looks invalid: \(ref)."
+        case .kernelImageUnsupportedOnContainerCLI:
+            return "Kernel images are only supported by the Containerization backend, not the container CLI backend."
+        case .kernelOverridePathEmpty:
+            return "Kernel override path is required."
         }
     }
 

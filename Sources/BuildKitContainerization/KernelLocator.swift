@@ -1,24 +1,23 @@
 import Foundation
 import BuildKitCore
+@preconcurrency import Containerization
 
 /// Locates a Linux kernel binary suitable for booting via apple/containerization.
 ///
-/// Resolution order (first hit wins):
-/// 1. Explicit override path from `BuildKitSettings.kernelOverridePath`.
-/// 2. Cached download from a prior run (under
-///    `~/Library/Application Support/Crucible/kernels/`).
-/// 3. Newest `vmlinux-*` under
-///    `~/Library/Application Support/com.apple.container/kernels/`,
-///    populated by the `apple/container` CLI.
-/// 4. Fresh download from Kata Containers' static release — the same source
-///    used by `apple/containerization`'s `make fetch-default-kernel` target.
-///
-/// The first three paths are synchronous; the fourth requires network I/O
-/// and so is exposed via ``locateOrDownload``.
+/// Resolution depends on ``BuildKitSettings/kernelSource``:
+/// - ``KernelSource/overridePath``: use the given `vmlinux` file directly.
+/// - ``KernelSource/registryImage``: pull an Apple-format kernel OCI image and
+///   extract the kernel for the host platform (requires an ``ImageStore``).
+/// - ``KernelSource/auto``: discover a kernel from, in order, Crucible's
+///   download cache, the `apple/container` CLI install directory, then a fresh
+///   download of Kata Containers' static release — the same source used by
+///   `apple/containerization`'s `make fetch-default-kernel` target.
 public enum KernelLocator {
     public enum Error: Swift.Error, CustomStringConvertible {
         case overrideMissing(String)
         case noKernelAvailable
+        case imageStoreUnavailable
+        case registryImageRequiresStart
 
         public var description: String {
             switch self {
@@ -31,6 +30,10 @@ public enum KernelLocator {
                 Apple's `container` CLI from https://github.com/apple/container and \
                 run `container system start` once, or call locateOrDownload.
                 """
+            case .imageStoreUnavailable:
+                return "A kernel image reference is configured but no image store was provided to resolve it."
+            case .registryImageRequiresStart:
+                return "A kernel image reference is configured; it is resolved when the builder starts."
             }
         }
     }
@@ -49,41 +52,64 @@ public enum KernelLocator {
         return base.appendingPathComponent("Crucible/kernels", isDirectory: true)
     }
 
-    /// Synchronous resolution: paths 1-3 only. Throws ``Error.noKernelAvailable``
-    /// if no kernel exists locally.
+    /// Synchronous resolution. Handles ``KernelSource/overridePath`` and the
+    /// local tiers of ``KernelSource/auto``. Throws for
+    /// ``KernelSource/registryImage`` (which requires async network I/O) and
+    /// when no local kernel is available.
     public static func locate(settings: BuildKitSettings) throws -> URL {
-        if let url = try locateLocal(settings: settings) {
-            return url
+        switch settings.kernelSource {
+        case .overridePath(let path):
+            return try resolveOverride(path)
+        case .registryImage:
+            throw Error.registryImageRequiresStart
+        case .auto:
+            if let url = locateAuto() {
+                return url
+            }
+            throw Error.noKernelAvailable
         }
-        throw Error.noKernelAvailable
     }
 
-    /// Full resolution: tries paths 1-3, falling back to a Kata download if
-    /// no local kernel exists. Progress events are forwarded for the
-    /// download case.
+    /// Full resolution. Resolves the configured ``KernelSource``, downloading or
+    /// pulling as needed. Progress events are forwarded for the Kata download
+    /// case only.
     public static func locateOrDownload(
         settings: BuildKitSettings,
+        imageStore: ImageStore? = nil,
         progress: (@Sendable (KernelDownloader.Progress) -> Void)? = nil
     ) async throws -> URL {
-        if let url = try locateLocal(settings: settings) {
-            return url
+        switch settings.kernelSource {
+        case .overridePath(let path):
+            return try resolveOverride(path)
+        case .registryImage(let reference, let subpath):
+            guard let imageStore else {
+                throw Error.imageStoreUnavailable
+            }
+            return try await KernelImageResolver.resolve(reference: reference, subpath: subpath, imageStore: imageStore)
+        case .auto:
+            if let url = locateAuto() {
+                return url
+            }
+            let downloader = KernelDownloader(cacheDirectory: crucibleKernelCacheDirectory())
+            return try await downloader.ensureKernel(progress: progress)
         }
-        let downloader = KernelDownloader(cacheDirectory: crucibleKernelCacheDirectory())
-        return try await downloader.ensureKernel(progress: progress)
     }
 
     // MARK: - Internals
 
-    /// Try paths 1-3 in order. Returns nil if nothing local is available.
-    /// Throws only if an explicit override is set but missing.
-    static func locateLocal(settings: BuildKitSettings) throws -> URL? {
-        if let override = settings.kernelOverridePath {
-            let url = URL(fileURLWithPath: override)
-            guard FileManager.default.fileExists(atPath: url.path) else {
-                throw Error.overrideMissing(override)
-            }
-            return url
+    /// Verify and return an explicit override path.
+    static func resolveOverride(_ path: String) throws -> URL {
+        let url = URL(fileURLWithPath: path)
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            throw Error.overrideMissing(path)
         }
+        return url
+    }
+
+    /// Local-disk tiers of ``KernelSource/auto``: Crucible cache, then the
+    /// `apple/container` CLI install directory. Returns nil if neither has a
+    /// candidate.
+    static func locateAuto() -> URL? {
         if let cached = newestVmlinux(in: crucibleKernelCacheDirectory()) {
             return cached
         }

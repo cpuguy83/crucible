@@ -261,7 +261,7 @@ public enum ContainerCLICommands {
             containerID: containerID,
             cpuCount: settings.cpuCount,
             memoryMiB: settings.memoryMiB,
-            kernelOverridePath: settings.kernelOverridePath,
+            kernelSource: settings.kernelSource,
             hostSocketPath: settings.hostSocketPath,
             guestSocketPath: "/run/buildkit/buildkitd.sock",
             statePath: statePath,
@@ -285,7 +285,7 @@ public enum ContainerCLICommands {
         containerID: String,
         cpuCount: Int,
         memoryMiB: Int,
-        kernelOverridePath: String?,
+        kernelSource: KernelSource,
         hostSocketPath: String,
         guestSocketPath: String,
         statePath: String,
@@ -301,7 +301,11 @@ public enum ContainerCLICommands {
             "--publish-socket", "\(hostSocketPath):\(guestSocketPath)",
             "--mount", "type=bind,source=\(statePath),target=\(guestStatePath)",
         ]
-        if let kernelOverridePath, !kernelOverridePath.isEmpty {
+        // The `container` CLI manages its own kernel images; only an explicit
+        // override path maps cleanly to its `--kernel` flag. `.registryImage`
+        // is rejected by validation for the container CLI backend, and `.auto`
+        // defers to the CLI's installed kernel.
+        if let kernelOverridePath = kernelSource.overridePath, !kernelOverridePath.isEmpty {
             args.append(contentsOf: ["--kernel", kernelOverridePath])
         }
         args.append("--rosetta")

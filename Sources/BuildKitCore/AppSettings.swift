@@ -216,7 +216,7 @@ public struct DockerSettings: Sendable, Equatable, Codable {
     public var initfsReference: String
     public var cpuCount: Int
     public var memoryMiB: Int
-    public var kernelOverridePath: String?
+    public var kernelSource: KernelSource
     public var autoStart: Bool
     public var transportMode: BuildKitTransportMode
     public var daemonConfigJSON: String
@@ -226,6 +226,9 @@ public struct DockerSettings: Sendable, Equatable, Codable {
         case initfsReference
         case cpuCount
         case memoryMiB
+        case kernelSource
+        /// Legacy field, decoded for backward compatibility and migrated into
+        /// ``kernelSource``. Never encoded.
         case kernelOverridePath
         case autoStart
         case transportMode
@@ -237,7 +240,7 @@ public struct DockerSettings: Sendable, Equatable, Codable {
         initfsReference: String = Self.defaultInitfsReference,
         cpuCount: Int = 4,
         memoryMiB: Int = 4096,
-        kernelOverridePath: String? = nil,
+        kernelSource: KernelSource = .auto,
         autoStart: Bool = false,
         transportMode: BuildKitTransportMode = .auto,
         daemonConfigJSON: String = ""
@@ -246,7 +249,7 @@ public struct DockerSettings: Sendable, Equatable, Codable {
         self.initfsReference = initfsReference
         self.cpuCount = cpuCount
         self.memoryMiB = memoryMiB
-        self.kernelOverridePath = kernelOverridePath
+        self.kernelSource = kernelSource
         self.autoStart = autoStart
         self.transportMode = transportMode
         self.daemonConfigJSON = daemonConfigJSON
@@ -255,12 +258,20 @@ public struct DockerSettings: Sendable, Equatable, Codable {
     public init(from decoder: Decoder) throws {
         let defaults = DockerSettings()
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        let kernelSource: KernelSource
+        if let decoded = try c.decodeIfPresent(KernelSource.self, forKey: .kernelSource) {
+            kernelSource = decoded
+        } else {
+            kernelSource = .fromLegacyOverridePath(
+                try c.decodeIfPresent(String.self, forKey: .kernelOverridePath)
+            )
+        }
         self.init(
             imageReference: try c.decodeIfPresent(String.self, forKey: .imageReference) ?? defaults.imageReference,
             initfsReference: try c.decodeIfPresent(String.self, forKey: .initfsReference) ?? defaults.initfsReference,
             cpuCount: try c.decodeIfPresent(Int.self, forKey: .cpuCount) ?? defaults.cpuCount,
             memoryMiB: try c.decodeIfPresent(Int.self, forKey: .memoryMiB) ?? defaults.memoryMiB,
-            kernelOverridePath: try c.decodeIfPresent(String.self, forKey: .kernelOverridePath) ?? defaults.kernelOverridePath,
+            kernelSource: kernelSource,
             autoStart: try c.decodeIfPresent(Bool.self, forKey: .autoStart) ?? defaults.autoStart,
             transportMode: try c.decodeIfPresent(BuildKitTransportMode.self, forKey: .transportMode) ?? defaults.transportMode,
             daemonConfigJSON: try c.decodeIfPresent(String.self, forKey: .daemonConfigJSON) ?? defaults.daemonConfigJSON
@@ -272,7 +283,19 @@ public struct DockerSettings: Sendable, Equatable, Codable {
             initfsReference: initfsReference,
             cpuCount: cpuCount,
             memoryMiB: memoryMiB,
-            kernelOverridePath: kernelOverridePath
+            kernelSource: kernelSource
         )
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(imageReference, forKey: .imageReference)
+        try c.encode(initfsReference, forKey: .initfsReference)
+        try c.encode(cpuCount, forKey: .cpuCount)
+        try c.encode(memoryMiB, forKey: .memoryMiB)
+        try c.encode(kernelSource, forKey: .kernelSource)
+        try c.encode(autoStart, forKey: .autoStart)
+        try c.encode(transportMode, forKey: .transportMode)
+        try c.encode(daemonConfigJSON, forKey: .daemonConfigJSON)
     }
 }

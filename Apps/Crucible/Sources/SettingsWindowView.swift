@@ -411,13 +411,39 @@ struct SettingsWindowView: View {
 
     private var kernelSettingsCard: some View {
         card("Kernel") {
-            settingLabel("Linux kernel override", "Optional path to a custom Linux kernel image. Leave blank to use Crucible's default lookup/download flow.")
-            HStack {
-                TextField("Use default kernel", text: kernelOverrideBinding)
+            settingLabel("Linux kernel", "Where the guest VM's Linux kernel comes from. You can let Crucible find one automatically, point at a kernel file on disk, or pull one from an OCI image.")
+            Picker("Kernel source", selection: kernelModeBinding) {
+                Text("Automatic").tag(KernelMode.auto)
+                Text("Kernel file on disk").tag(KernelMode.file)
+                Text("Kernel from OCI image").tag(KernelMode.image)
+            }
+            .pickerStyle(.radioGroup)
+            .labelsHidden()
+
+            switch selectedKernelMode {
+            case .auto:
+                Text("Crucible uses a cached kernel, then the Apple `container` CLI's kernels, then downloads one from Kata Containers.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+            case .file:
+                HStack {
+                    TextField("/path/to/vmlinuz", text: kernelOverrideBinding)
+                        .textFieldStyle(.roundedBorder)
+                    Button("Browse…", action: viewModel.chooseKernelOverride)
+                }
+                Text("Path to a Linux kernel binary on this Mac.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+            case .image:
+                settingLabel("Image reference", "Pulled from a registry when the builder starts. Only supported by the Containerization backend.")
+                TextField("ghcr.io/you/kernel:6.6", text: kernelImageReferenceBinding)
                     .textFieldStyle(.roundedBorder)
-                Button("Browse…", action: viewModel.chooseKernelOverride)
-                Button("Use Default", action: viewModel.useDefaultKernel)
-                    .disabled(selectedKernelOverridePath == nil)
+
+                settingLabel("Kernel subpath", "Optional subpath to vmlinuz inside the image (e.g. /boot/vmlinuz-6.6.0). Leave blank for an Apple-format kernel image, or for a regular OCI image with the kernel at /boot/vmlinuz or /vmlinuz (versioned names like vmlinuz-<version> are matched too). Set it to extract the kernel from a non-standard location.")
+                TextField("Optional subpath to vmlinuz", text: kernelImageSubpathBinding)
+                    .textFieldStyle(.roundedBorder)
             }
         }
     }
@@ -1279,16 +1305,76 @@ struct SettingsWindowView: View {
         }
     }
 
+    private enum KernelMode: Hashable {
+        case auto
+        case file
+        case image
+    }
+
+    private var selectedKernelMode: KernelMode {
+        switch selectedKernelSource {
+        case .auto: return .auto
+        case .overridePath: return .file
+        case .registryImage: return .image
+        }
+    }
+
+    private var kernelModeBinding: Binding<KernelMode> {
+        Binding {
+            selectedKernelMode
+        } set: { mode in
+            switch mode {
+            case .auto:
+                setKernelSource(.auto)
+            case .file:
+                setKernelSource(.overridePath(selectedKernelSource.overridePath ?? ""))
+            case .image:
+                setKernelSource(.registryImage(
+                    reference: selectedKernelSource.registryImageReference ?? "",
+                    subpath: selectedKernelSource.registryImageSubpath
+                ))
+            }
+        }
+    }
+
     private var kernelOverrideBinding: Binding<String> {
         Binding {
-            selectedKernelOverridePath ?? ""
+            selectedKernelSource.overridePath ?? ""
+        } set: { newValue in
+            // Stay in "file" mode while editing; the mode is controlled by the
+            // radio picker, not by whether the field is empty.
+            setKernelSource(.overridePath(newValue.trimmingCharacters(in: .whitespacesAndNewlines)))
+        }
+    }
+
+    private var kernelImageReferenceBinding: Binding<String> {
+        Binding {
+            selectedKernelSource.registryImageReference ?? ""
+        } set: { newValue in
+            setKernelSource(.registryImage(
+                reference: newValue.trimmingCharacters(in: .whitespacesAndNewlines),
+                subpath: selectedKernelSource.registryImageSubpath
+            ))
+        }
+    }
+
+    private var kernelImageSubpathBinding: Binding<String> {
+        Binding {
+            selectedKernelSource.registryImageSubpath ?? ""
         } set: { newValue in
             let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            if viewModel.selectedBuilderIsDocker {
-                viewModel.dockerSettingsDraft.kernelOverridePath = trimmed.isEmpty ? nil : trimmed
-            } else {
-                viewModel.settingsDraft.kernelOverridePath = trimmed.isEmpty ? nil : trimmed
-            }
+            setKernelSource(.registryImage(
+                reference: selectedKernelSource.registryImageReference ?? "",
+                subpath: trimmed.isEmpty ? nil : trimmed
+            ))
+        }
+    }
+
+    private func setKernelSource(_ source: KernelSource) {
+        if viewModel.selectedBuilderIsDocker {
+            viewModel.dockerSettingsDraft.kernelSource = source
+        } else {
+            viewModel.settingsDraft.kernelSource = source
         }
     }
 
@@ -1351,8 +1437,8 @@ struct SettingsWindowView: View {
         viewModel.selectedBuilderIsDocker ? viewModel.dockerSettingsDraft.memoryMiB : viewModel.settingsDraft.memoryMiB
     }
 
-    private var selectedKernelOverridePath: String? {
-        viewModel.selectedBuilderIsDocker ? viewModel.dockerSettingsDraft.kernelOverridePath : viewModel.settingsDraft.kernelOverridePath
+    private var selectedKernelSource: KernelSource {
+        viewModel.selectedBuilderIsDocker ? viewModel.dockerSettingsDraft.kernelSource : viewModel.settingsDraft.kernelSource
     }
 }
 

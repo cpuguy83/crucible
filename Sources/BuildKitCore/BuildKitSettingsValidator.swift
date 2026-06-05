@@ -12,6 +12,10 @@ public enum BuildKitSettingsValidator {
         case backendUnavailable(BuildKitSettings.BackendKind)
         case daemonConfigTooLarge(Int)
         case daemonConfigMalformed(String)
+        case kernelImageReferenceEmpty
+        case kernelImageReferenceMalformed(String)
+        case kernelImageUnsupportedOnContainerCLI
+        case kernelOverridePathEmpty
     }
 
     public static func validate(_ s: BuildKitSettings) -> [Issue] {
@@ -23,6 +27,8 @@ public enum BuildKitSettingsValidator {
         } else if !isPlausibleImageReference(ref) {
             issues.append(.imageReferenceMalformed(ref))
         }
+
+        issues.append(contentsOf: validateKernelSource(s.kernelSource, backend: s.backend))
 
         if s.hostSocketPath.isEmpty {
             issues.append(.socketPathEmpty)
@@ -48,8 +54,34 @@ public enum BuildKitSettingsValidator {
         return issues
     }
 
-    static func validateDaemonConfigShape(_ config: String) -> String? {
-        let trimmed = config.trimmingCharacters(in: .whitespacesAndNewlines)
+    /// Validates the configured kernel source. Path/reference existence and
+    /// reachability are deferred to resolution time; this only checks shape and
+    /// backend compatibility.
+    static func validateKernelSource(
+        _ source: KernelSource,
+        backend: BuildKitSettings.BackendKind
+    ) -> [Issue] {
+        switch source {
+        case .auto:
+            return []
+        case .overridePath(let path):
+            return path.trimmingCharacters(in: .whitespaces).isEmpty ? [.kernelOverridePathEmpty] : []
+        case .registryImage(let reference, _):
+            var issues: [Issue] = []
+            let trimmed = reference.trimmingCharacters(in: .whitespaces)
+            if trimmed.isEmpty {
+                issues.append(.kernelImageReferenceEmpty)
+            } else if !isPlausibleImageReference(trimmed) {
+                issues.append(.kernelImageReferenceMalformed(trimmed))
+            }
+            if backend == .containerCLI {
+                issues.append(.kernelImageUnsupportedOnContainerCLI)
+            }
+            return issues
+        }
+    }
+
+    static func validateDaemonConfigShape(_ config: String) -> String? {        let trimmed = config.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
         for (index, rawLine) in config.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {

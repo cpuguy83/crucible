@@ -71,7 +71,7 @@ public actor DockerContainerizationBackend {
 
             progressContinuation.yield(.init(phase: .downloadingKernel, message: "Locating kernel"))
             let progressSink = self.progressContinuation
-            let kernelURL = try await KernelLocator.locateOrDownload(settings: settings.kernelSettings) { p in
+            let kernelURL = try await KernelLocator.locateOrDownload(settings: settings.kernelSettings, imageStore: imageStore) { p in
                 let msg: String
                 switch p.phase {
                 case .downloading:

@@ -105,7 +105,7 @@ public actor ContainerizationBackend: BuildKitBackend {
             // run; cached thereafter.
             progressContinuation.yield(.init(phase: .downloadingKernel, message: "Locating kernel"))
             let progressSink = self.progressContinuation
-            let kernelURL = try await KernelLocator.locateOrDownload(settings: settings) { p in
+            let kernelURL = try await KernelLocator.locateOrDownload(settings: settings, imageStore: imageStore) { p in
                 let msg: String
                 switch p.phase {
                 case .downloading:

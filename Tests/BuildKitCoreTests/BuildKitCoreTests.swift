@@ -419,7 +419,7 @@ struct AppSettingsTests {
                         initfsReference: "ghcr.io/apple/containerization/vminit:0.31.0",
                         cpuCount: 6,
                         memoryMiB: 8192,
-                        kernelOverridePath: "/tmp/vmlinux",
+                        kernelSource: .overridePath("/tmp/vmlinux"),
                         autoStart: true,
                         transportMode: .directH2C,
                         daemonConfigJSON: #"{"debug":true}"#
@@ -432,6 +432,52 @@ struct AppSettingsTests {
         let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
 
         #expect(decoded == settings)
+    }
+}
+
+@Suite("KernelSource")
+struct KernelSourceTests {
+    private func roundTrip(_ source: KernelSource) throws -> KernelSource {
+        let data = try JSONEncoder().encode(source)
+        return try JSONDecoder().decode(KernelSource.self, from: data)
+    }
+
+    @Test func autoRoundTrips() throws {
+        #expect(try roundTrip(.auto) == .auto)
+    }
+
+    @Test func overridePathRoundTrips() throws {
+        #expect(try roundTrip(.overridePath("/tmp/vmlinux")) == .overridePath("/tmp/vmlinux"))
+    }
+
+    @Test func registryImageWithoutSubpathRoundTrips() throws {
+        let source = KernelSource.registryImage(reference: "ghcr.io/you/kernel:6.6", subpath: nil)
+        #expect(try roundTrip(source) == source)
+    }
+
+    @Test func registryImageWithSubpathRoundTrips() throws {
+        let source = KernelSource.registryImage(reference: "ghcr.io/you/kernel:6.6", subpath: "/boot/vmlinux")
+        let decoded = try roundTrip(source)
+        #expect(decoded == source)
+        #expect(decoded.registryImageReference == "ghcr.io/you/kernel:6.6")
+        #expect(decoded.registryImageSubpath == "/boot/vmlinux")
+    }
+
+    @Test func registryImageSubpathOmittedFromJSONWhenNil() throws {
+        let data = try JSONEncoder().encode(KernelSource.registryImage(reference: "img:latest", subpath: nil))
+        let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(object["subpath"] == nil)
+    }
+
+    @Test func legacyOverridePathMapsToOverride() {
+        #expect(KernelSource.fromLegacyOverridePath("/tmp/k") == .overridePath("/tmp/k"))
+        #expect(KernelSource.fromLegacyOverridePath(nil) == .auto)
+        #expect(KernelSource.fromLegacyOverridePath("") == .auto)
+    }
+
+    @Test func appleFormatModeReportsNoSubpath() {
+        let source = KernelSource.registryImage(reference: "img:latest", subpath: nil)
+        #expect(source.registryImageSubpath == nil)
     }
 }
 

@@ -7,7 +7,7 @@ import BuildKitCore
 struct KernelLocatorTests {
     @Test func overrideMissingFails() {
         var s = BuildKitSettings()
-        s.kernelOverridePath = "/definitely/does/not/exist/vmlinux"
+        s.kernelSource = .overridePath("/definitely/does/not/exist/vmlinux")
         #expect(throws: KernelLocator.Error.self) {
             _ = try KernelLocator.locate(settings: s)
         }
@@ -20,9 +20,25 @@ struct KernelLocatorTests {
         defer { try? FileManager.default.removeItem(at: tmp) }
 
         var s = BuildKitSettings()
-        s.kernelOverridePath = tmp.path
+        s.kernelSource = .overridePath(tmp.path)
         let url = try KernelLocator.locate(settings: s)
         #expect(url.path == tmp.path)
+    }
+
+    @Test func registryImageRequiresStartFromSyncLocate() {
+        var s = BuildKitSettings()
+        s.kernelSource = .registryImage(reference: "ghcr.io/example/kernel:latest", subpath: nil)
+        #expect(throws: KernelLocator.Error.self) {
+            _ = try KernelLocator.locate(settings: s)
+        }
+    }
+
+    @Test func registryImageWithoutImageStoreFails() async {
+        var s = BuildKitSettings()
+        s.kernelSource = .registryImage(reference: "ghcr.io/example/kernel:latest", subpath: nil)
+        await #expect(throws: KernelLocator.Error.self) {
+            _ = try await KernelLocator.locateOrDownload(settings: s, imageStore: nil)
+        }
     }
 
     @Test func searchDirectoriesUseExpectedPaths() {
@@ -30,6 +46,30 @@ struct KernelLocatorTests {
         #expect(cli.hasSuffix("Library/Application Support/com.apple.container/kernels"))
         let cache = KernelLocator.crucibleKernelCacheDirectory().path
         #expect(cache.hasSuffix("Library/Application Support/Crucible/kernels"))
+    }
+
+    @Test func defaultKernelPathsCoverCommonLocations() {
+        // When no subpath is given and the image is a standard OCI image, these
+        // rootfs locations are searched in order.
+        #expect(KernelImageResolver.defaultKernelPaths == ["boot/vmlinuz", "vmlinuz"])
+    }
+
+    @Test func defaultKernelMatcherAcceptsBareAndVersionedNames() {
+        #expect(KernelImageResolver.matchesDefaultKernel("boot/vmlinuz"))
+        #expect(KernelImageResolver.matchesDefaultKernel("vmlinuz"))
+        #expect(KernelImageResolver.matchesDefaultKernel("boot/vmlinuz-6.6.0-amd64"))
+        #expect(KernelImageResolver.matchesDefaultKernel("vmlinuz-6.6.0"))
+    }
+
+    @Test func defaultKernelMatcherRejectsOtherPaths() {
+        // Wrong directory.
+        #expect(!KernelImageResolver.matchesDefaultKernel("usr/lib/vmlinuz"))
+        // Not a kernel.
+        #expect(!KernelImageResolver.matchesDefaultKernel("boot/initrd.img"))
+        // vmlinux (non-z) is intentionally not matched by the default search.
+        #expect(!KernelImageResolver.matchesDefaultKernel("boot/vmlinux"))
+        // Prefix-only without separator should not match.
+        #expect(!KernelImageResolver.matchesDefaultKernel("boot/vmlinuzfoo"))
     }
 
     @Test func newestVmlinuxPicksMostRecent() throws {

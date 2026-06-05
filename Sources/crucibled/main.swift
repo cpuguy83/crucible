@@ -23,7 +23,7 @@ struct Main {
                 let kernel = try await KernelLocator.locateOrDownload(settings: settings) { progress in
                     fputs("KERNEL[\(progress.phase)]: \(progress.bytesReceived)\n", stderr)
                 }
-                settings.kernelOverridePath = kernel.path
+                settings.kernelSource = .overridePath(kernel.path)
             } catch {
                 fputs("failed to prepare CLI smoke kernel: \(error)\n", stderr)
                 exit(1)

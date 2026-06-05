@@ -36,10 +36,10 @@ public struct BuildKitSettings: Sendable, Equatable, Codable {
     /// Memory in MiB for the container's VM.
     public var memoryMiB: Int
 
-    /// Optional override path for the Linux kernel binary. When nil, the
-    /// backend discovers a kernel from the apple/container CLI install
-    /// directory (`~/Library/Application Support/com.apple.container/kernels/`).
-    public var kernelOverridePath: String?
+    /// Where the Linux kernel comes from. Defaults to ``KernelSource/auto``,
+    /// which discovers a kernel from Crucible's cache, the apple/container CLI
+    /// install directory, then a Kata Containers download.
+    public var kernelSource: KernelSource
 
     /// Whether the daemon should auto-start when the app launches / on login.
     public var autoStart: Bool
@@ -55,7 +55,7 @@ public struct BuildKitSettings: Sendable, Equatable, Codable {
         hostSocketPath: String = BuildKitSettings.defaultHostSocketPath(),
         cpuCount: Int = 4,
         memoryMiB: Int = 4096,
-        kernelOverridePath: String? = nil,
+        kernelSource: KernelSource = .auto,
         autoStart: Bool = true,
         daemonConfigTOML: String = ""
     ) {
@@ -65,7 +65,7 @@ public struct BuildKitSettings: Sendable, Equatable, Codable {
         self.hostSocketPath = hostSocketPath
         self.cpuCount = cpuCount
         self.memoryMiB = memoryMiB
-        self.kernelOverridePath = kernelOverridePath
+        self.kernelSource = kernelSource
         self.autoStart = autoStart
         self.daemonConfigTOML = daemonConfigTOML
     }
@@ -77,6 +77,9 @@ public struct BuildKitSettings: Sendable, Equatable, Codable {
         case hostSocketPath
         case cpuCount
         case memoryMiB
+        case kernelSource
+        /// Legacy field, decoded for backward compatibility and migrated into
+        /// ``kernelSource``. Never encoded.
         case kernelOverridePath
         case autoStart
         case daemonConfigTOML
@@ -86,6 +89,15 @@ public struct BuildKitSettings: Sendable, Equatable, Codable {
         let defaults = BuildKitSettings()
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let decodedImageReference = try c.decodeIfPresent(String.self, forKey: .imageReference) ?? defaults.imageReference
+        let kernelSource: KernelSource
+        if let decoded = try c.decodeIfPresent(KernelSource.self, forKey: .kernelSource) {
+            kernelSource = decoded
+        } else {
+            // Migrate the legacy `kernelOverridePath` field if present.
+            kernelSource = .fromLegacyOverridePath(
+                try c.decodeIfPresent(String.self, forKey: .kernelOverridePath)
+            )
+        }
         self.init(
             backend: try c.decodeIfPresent(BackendKind.self, forKey: .backend) ?? defaults.backend,
             imageReference: decodedImageReference,
@@ -93,7 +105,7 @@ public struct BuildKitSettings: Sendable, Equatable, Codable {
             hostSocketPath: try c.decodeIfPresent(String.self, forKey: .hostSocketPath) ?? defaults.hostSocketPath,
             cpuCount: try c.decodeIfPresent(Int.self, forKey: .cpuCount) ?? defaults.cpuCount,
             memoryMiB: try c.decodeIfPresent(Int.self, forKey: .memoryMiB) ?? defaults.memoryMiB,
-            kernelOverridePath: try c.decodeIfPresent(String.self, forKey: .kernelOverridePath) ?? defaults.kernelOverridePath,
+            kernelSource: kernelSource,
             autoStart: try c.decodeIfPresent(Bool.self, forKey: .autoStart) ?? defaults.autoStart,
             daemonConfigTOML: try c.decodeIfPresent(String.self, forKey: .daemonConfigTOML) ?? defaults.daemonConfigTOML
         )
@@ -109,7 +121,7 @@ public struct BuildKitSettings: Sendable, Equatable, Codable {
         if hostSocketPath != defaults.hostSocketPath { try c.encode(hostSocketPath, forKey: .hostSocketPath) }
         if cpuCount != defaults.cpuCount { try c.encode(cpuCount, forKey: .cpuCount) }
         if memoryMiB != defaults.memoryMiB { try c.encode(memoryMiB, forKey: .memoryMiB) }
-        if kernelOverridePath != defaults.kernelOverridePath { try c.encode(kernelOverridePath, forKey: .kernelOverridePath) }
+        if kernelSource != defaults.kernelSource { try c.encode(kernelSource, forKey: .kernelSource) }
         if autoStart != defaults.autoStart { try c.encode(autoStart, forKey: .autoStart) }
         if daemonConfigTOML != defaults.daemonConfigTOML { try c.encode(daemonConfigTOML, forKey: .daemonConfigTOML) }
     }
