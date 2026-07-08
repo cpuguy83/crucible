@@ -36,12 +36,12 @@
 		15504BF7A2219A6E8EC8FE2C /* LogStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogStore.swift; sourceTree = "<group>"; };
 		4958C4DA970F90DE612B90EC /* CrucibleApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrucibleApp.swift; sourceTree = "<group>"; };
 		65D7C4C8935AF60EE2E721AF /* LogsWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogsWindowView.swift; sourceTree = "<group>"; };
+		75992E0D8E039A87195B3C59 /* crucible */ = {isa = PBXFileReference; lastKnownFileType = folder; name = crucible; path = .; sourceTree = SOURCE_ROOT; };
 		784B055122285A953F5AE66D /* Crucible.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Crucible.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8266C91A13F97748BA1A66E7 /* StorageUsage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageUsage.swift; sourceTree = "<group>"; };
 		912D69A974EF1420BEC134FD /* HostResourceLimits.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostResourceLimits.swift; sourceTree = "<group>"; };
 		92CFDF081682E78F12D263DB /* LogTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogTextView.swift; sourceTree = "<group>"; };
 		AE6356A493ADF9F4EB5367E5 /* LoginItemManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginItemManager.swift; sourceTree = "<group>"; };
-		B74951F61660E212A4369A99 /* apple-buildkit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "apple-buildkit"; path = .; sourceTree = SOURCE_ROOT; };
 		BD6981CFA60A3CFFC47969B4 /* SelectedBuilderRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectedBuilderRuntime.swift; sourceTree = "<group>"; };
 		C8BF14F272CC999F8BF0E626 /* LogWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogWindowController.swift; sourceTree = "<group>"; };
 		CA883ACE2B7E6EA5C438F67C /* SettingsWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindowView.swift; sourceTree = "<group>"; };
@@ -70,7 +70,7 @@
 		13575C6F7B8AFFD0EFC134AA /* Packages */ = {
 			isa = PBXGroup;
 			children = (
-				B74951F61660E212A4369A99 /* apple-buildkit */,
+				75992E0D8E039A87195B3C59 /* crucible */,
 			);
 			name = Packages;
 			sourceTree = "<group>";
