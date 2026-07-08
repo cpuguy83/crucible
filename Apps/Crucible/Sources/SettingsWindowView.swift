@@ -126,6 +126,7 @@ struct SettingsWindowView: View {
             } else {
                 dockerImageSettingsCard
                 dockerDaemonConfigSettingsCard
+                dockerMountsSettingsCard
                 resourceSettingsCard
                 kernelSettingsCard
             }
@@ -388,6 +389,56 @@ struct SettingsWindowView: View {
                 .font(.caption.monospaced())
                 .foregroundStyle(.secondary)
                 .textSelection(.enabled)
+        }
+    }
+
+    private var dockerMountsSettingsCard: some View {
+        card("Mounts") {
+            settingLabel("Host mounts", "Folders or files on this Mac shared into the Docker VM at the same path. A host path like `/Users/me/proj` appears at `/Users/me/proj` inside the guest, so `docker run -v /Users/me/proj:/app` resolves. Changes apply when settings are applied and Docker restarts.")
+
+            if viewModel.dockerSettingsDraft.hostMounts.isEmpty {
+                Text("No host mounts shared.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(spacing: 8) {
+                    ForEach($viewModel.dockerSettingsDraft.hostMounts, id: \.path) { $mount in
+                        hostMountRow($mount)
+                    }
+                }
+            }
+
+            HStack {
+                Button("Add Mount…", action: viewModel.chooseHostMount)
+                Text("Read-only mounts cannot be modified from inside the container.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Text("Host file changes aren't delivered as inotify events inside the guest, so file watchers (vite, nodemon, air, …) may need polling mode.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func hostMountRow(_ mount: Binding<HostMount>) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(mount.wrappedValue.path)
+                .font(.caption.monospaced())
+                .foregroundStyle(.primary)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Toggle("Read-only", isOn: mount.readOnly)
+                .toggleStyle(.checkbox)
+                .font(.caption)
+            Button {
+                if let index = viewModel.dockerSettingsDraft.hostMounts.firstIndex(where: { $0.path == mount.wrappedValue.path }) {
+                    viewModel.removeHostMount(at: IndexSet(integer: index))
+                }
+            } label: {
+                Image(systemName: "trash")
+            }
+            .buttonStyle(.borderless)
+            .help("Remove this mount")
         }
     }
 

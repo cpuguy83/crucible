@@ -79,6 +79,18 @@ The app can create either a Docker context or a Docker buildx builder from
 **Settings > Integrations**. These integrations are mutually exclusive for the
 selected dockerd-based builder, and the UI lets you switch between them.
 
+To bind-mount host directories into containers, add them under
+**Settings > Mounts**. Each entry is shared into the VM at the same path it has
+on your Mac, so a host path like `/Users/me/proj` appears at `/Users/me/proj`
+inside the guest and `docker run -v /Users/me/proj:/app` resolves as expected.
+Mounts can be marked read-only, and changes apply on the next Docker restart.
+
+File contents are shared live in both directions, but host-side changes are not
+delivered as `inotify` events inside the guest (a limitation of the
+Virtualization framework's virtiofs share). File watchers running in a
+container — for example `vite`, `nodemon`, or `air` — may therefore miss host
+edits and need polling mode (e.g. `CHOKIDAR_USEPOLLING=1`).
+
 ## Requirements
 
 - Apple silicon Mac.

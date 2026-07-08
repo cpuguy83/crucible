@@ -202,6 +202,42 @@ public enum BuilderKind: Sendable, Equatable, Codable {
     }
 }
 
+/// A host directory or file shared into the dockerd builder VM at the identical
+/// guest path, so `docker run -v /host/path:/container/path` bind sources
+/// resolve. Mirrors the Docker Desktop model where a host path appears at the
+/// same path inside the guest.
+public struct HostMount: Sendable, Equatable, Codable {
+    /// Absolute host path shared into the VM. The guest sees it at the same path.
+    public var path: String
+    /// When true the share is mounted read-only; otherwise guest writes
+    /// propagate back to the host.
+    public var readOnly: Bool
+
+    private enum CodingKeys: String, CodingKey {
+        case path
+        case readOnly
+    }
+
+    public init(path: String, readOnly: Bool = false) {
+        self.path = path
+        self.readOnly = readOnly
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            path: try c.decode(String.self, forKey: .path),
+            readOnly: try c.decodeIfPresent(Bool.self, forKey: .readOnly) ?? false
+        )
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(path, forKey: .path)
+        try c.encode(readOnly, forKey: .readOnly)
+    }
+}
+
 public struct DockerSettings: Sendable, Equatable, Codable {
     public static let defaultImageReference = "docker.io/library/docker:dind"
     public static let defaultInitfsReference = "ghcr.io/apple/containerization/vminit:0.31.0"
@@ -220,6 +256,7 @@ public struct DockerSettings: Sendable, Equatable, Codable {
     public var autoStart: Bool
     public var transportMode: BuildKitTransportMode
     public var daemonConfigJSON: String
+    public var hostMounts: [HostMount]
 
     private enum CodingKeys: String, CodingKey {
         case imageReference
@@ -233,6 +270,7 @@ public struct DockerSettings: Sendable, Equatable, Codable {
         case autoStart
         case transportMode
         case daemonConfigJSON
+        case hostMounts
     }
 
     public init(
@@ -243,7 +281,8 @@ public struct DockerSettings: Sendable, Equatable, Codable {
         kernelSource: KernelSource = .auto,
         autoStart: Bool = false,
         transportMode: BuildKitTransportMode = .auto,
-        daemonConfigJSON: String = ""
+        daemonConfigJSON: String = "",
+        hostMounts: [HostMount] = []
     ) {
         self.imageReference = imageReference
         self.initfsReference = initfsReference
@@ -253,6 +292,7 @@ public struct DockerSettings: Sendable, Equatable, Codable {
         self.autoStart = autoStart
         self.transportMode = transportMode
         self.daemonConfigJSON = daemonConfigJSON
+        self.hostMounts = hostMounts
     }
 
     public init(from decoder: Decoder) throws {
@@ -274,7 +314,8 @@ public struct DockerSettings: Sendable, Equatable, Codable {
             kernelSource: kernelSource,
             autoStart: try c.decodeIfPresent(Bool.self, forKey: .autoStart) ?? defaults.autoStart,
             transportMode: try c.decodeIfPresent(BuildKitTransportMode.self, forKey: .transportMode) ?? defaults.transportMode,
-            daemonConfigJSON: try c.decodeIfPresent(String.self, forKey: .daemonConfigJSON) ?? defaults.daemonConfigJSON
+            daemonConfigJSON: try c.decodeIfPresent(String.self, forKey: .daemonConfigJSON) ?? defaults.daemonConfigJSON,
+            hostMounts: try c.decodeIfPresent([HostMount].self, forKey: .hostMounts) ?? defaults.hostMounts
         )
     }
 
@@ -297,5 +338,8 @@ public struct DockerSettings: Sendable, Equatable, Codable {
         try c.encode(autoStart, forKey: .autoStart)
         try c.encode(transportMode, forKey: .transportMode)
         try c.encode(daemonConfigJSON, forKey: .daemonConfigJSON)
+        if !hostMounts.isEmpty {
+            try c.encode(hostMounts, forKey: .hostMounts)
+        }
     }
 }

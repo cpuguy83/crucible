@@ -154,6 +154,7 @@ public actor DockerContainerizationBackend {
                     options: ["ro"]
                 ))
             }
+            extraMounts.append(contentsOf: Self.hostMountShares(for: settings))
 
             let cpuCount = settings.cpuCount
             let memoryBytes = UInt64(settings.memoryMiB).mib()
@@ -281,6 +282,27 @@ public actor DockerContainerizationBackend {
         }
         try config.write(to: url, atomically: true, encoding: .utf8)
         return url
+    }
+
+    /// Builds the virtiofs shares for user-configured host mounts. Each entry is
+    /// shared at the identical guest path (`destination == source`) so
+    /// `docker run -v /host/path:/container/path` bind sources resolve, mirroring
+    /// the Docker Desktop model. Read-only entries are mounted with the `ro`
+    /// option. Pure and side-effect free so it can be unit tested without
+    /// booting a VM.
+    ///
+    /// Note: file contents are shared live in both directions, but the
+    /// Virtualization framework's virtiofs share does not propagate host-side
+    /// changes as guest `inotify` events (unlike Docker Desktop, which runs its
+    /// own `virtiofsd`). In-container file watchers may need polling mode.
+    static func hostMountShares(for settings: DockerSettings) -> [Containerization.Mount] {
+        settings.hostMounts.map { mount in
+            Containerization.Mount.share(
+                source: mount.path,
+                destination: mount.path,
+                options: mount.readOnly ? ["ro"] : []
+            )
+        }
     }
 
     private func releaseLifecycleLock() {

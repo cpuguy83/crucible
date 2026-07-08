@@ -1068,6 +1068,25 @@ final class TrayViewModel: ObservableObject {
         }
     }
 
+    func chooseHostMount() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose Host Mount"
+        panel.message = "Choose a folder or file on this Mac to share into the Docker VM. It appears at the same path inside the guest, so `docker run -v <path>:<target>` resolves."
+        panel.prompt = "Add"
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = true
+        guard panel.runModal() == .OK else { return }
+        let existing = Set(dockerSettingsDraft.hostMounts.map(\.path))
+        for url in panel.urls where !existing.contains(url.path) {
+            dockerSettingsDraft.hostMounts.append(HostMount(path: url.path, readOnly: false))
+        }
+    }
+
+    func removeHostMount(at offsets: IndexSet) {
+        dockerSettingsDraft.hostMounts.remove(atOffsets: offsets)
+    }
+
     func setLaunchAtLogin(_ enabled: Bool) {
         do {
             try LoginItemManager.setEnabled(enabled)
@@ -1317,6 +1336,14 @@ final class TrayViewModel: ObservableObject {
             return "Docker daemon config must be 256 KiB or smaller (currently \(bytes) bytes)."
         case .dockerDaemonConfigMalformed(let detail):
             return "Docker daemon config must be a JSON object: \(detail)."
+        case .dockerHostMountPathEmpty:
+            return "Host mount path cannot be empty."
+        case .dockerHostMountPathNotAbsolute(let path):
+            return "Host mount path must be an absolute path: \(path)."
+        case .dockerHostMountPathDangerous(let path):
+            return "Host mount path is not allowed for safety reasons: \(path)."
+        case .dockerHostMountDuplicate(let path):
+            return "Host mount path is listed more than once: \(path)."
         }
     }
 

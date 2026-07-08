@@ -481,6 +481,48 @@ struct KernelSourceTests {
     }
 }
 
+@Suite("DockerSettings")
+struct DockerSettingsTests {
+    @Test func hostMountsRoundTripThroughJSON() throws {
+        let settings = DockerSettings(hostMounts: [
+            HostMount(path: "/Users/me/proj"),
+            HostMount(path: "/Users/me/data", readOnly: true),
+        ])
+
+        let data = try JSONEncoder().encode(settings)
+        let decoded = try JSONDecoder().decode(DockerSettings.self, from: data)
+
+        #expect(decoded == settings)
+        #expect(decoded.hostMounts.count == 2)
+        #expect(decoded.hostMounts[1].readOnly)
+    }
+
+    @Test func emptyHostMountsAreOmittedFromJSON() throws {
+        let data = try JSONEncoder().encode(DockerSettings())
+        let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+        #expect(object["hostMounts"] == nil)
+    }
+
+    @Test func settingsWithoutHostMountsKeyDecodesToEmpty() throws {
+        let json = #"{"imageReference":"docker.io/library/docker:dind","initfsReference":"ghcr.io/apple/containerization/vminit:0.31.0","cpuCount":4,"memoryMiB":4096,"autoStart":false,"transportMode":"auto","daemonConfigJSON":""}"#
+        let data = try #require(json.data(using: .utf8))
+
+        let decoded = try JSONDecoder().decode(DockerSettings.self, from: data)
+
+        #expect(decoded.hostMounts.isEmpty)
+    }
+
+    @Test func hostMountReadOnlyDefaultsToFalseWhenAbsent() throws {
+        let json = #"{"path":"/Users/me/proj"}"#
+        let data = try #require(json.data(using: .utf8))
+
+        let decoded = try JSONDecoder().decode(HostMount.self, from: data)
+
+        #expect(decoded == HostMount(path: "/Users/me/proj", readOnly: false))
+    }
+}
+
 @Suite("BuilderConfigValidator")
 struct BuilderConfigValidatorTests {
     @Test func buildKitValidationReusesBuildKitSettingsValidation() {
@@ -536,6 +578,43 @@ struct BuilderConfigValidatorTests {
         let settings = DockerSettings(initfsReference: "ghcr.io/apple/containerization/vminit")
 
         #expect(BuilderConfigValidator.validate(settings).contains(.dockerInitfsReferenceMalformed("ghcr.io/apple/containerization/vminit")))
+    }
+
+    @Test func dockerHostMountsAcceptValidAbsolutePaths() {
+        let settings = DockerSettings(hostMounts: [
+            HostMount(path: "/Users/me/proj"),
+            HostMount(path: "/Users/me/data", readOnly: true),
+        ])
+
+        #expect(BuilderConfigValidator.validate(settings).isEmpty)
+    }
+
+    @Test func dockerHostMountEmptyPathIsRejected() {
+        let settings = DockerSettings(hostMounts: [HostMount(path: "  ")])
+
+        #expect(BuilderConfigValidator.validate(settings) == [.dockerHostMountPathEmpty])
+    }
+
+    @Test func dockerHostMountRelativePathIsRejected() {
+        let settings = DockerSettings(hostMounts: [HostMount(path: "relative/path")])
+
+        #expect(BuilderConfigValidator.validate(settings) == [.dockerHostMountPathNotAbsolute("relative/path")])
+    }
+
+    @Test func dockerHostMountDangerousRootIsRejected() {
+        for path in ["/", "/System", "/private/etc", "/usr/local", "/etc"] {
+            let settings = DockerSettings(hostMounts: [HostMount(path: path)])
+            #expect(BuilderConfigValidator.validate(settings) == [.dockerHostMountPathDangerous(path)])
+        }
+    }
+
+    @Test func dockerHostMountDuplicatesAreRejected() {
+        let settings = DockerSettings(hostMounts: [
+            HostMount(path: "/Users/me/proj"),
+            HostMount(path: "/Users/me/proj/"),
+        ])
+
+        #expect(BuilderConfigValidator.validate(settings) == [.dockerHostMountDuplicate("/Users/me/proj/")])
     }
 }
 
